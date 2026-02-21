@@ -1,226 +1,209 @@
-<h1 align="center">OpenNOW</h1>
+# Android Build Guide
 
-<p align="center">
-  <img src="logo.png" alt="OpenNOW logo" width="180" />
-</p>
-
-<p align="center">
-  <strong>An open-source GeForce NOW client — play your games, your way.</strong>
-</p>
-
-<p align="center">
-  <img src="img.png" alt="OpenNOW" />
-</p>
-
-<p align="center">
-  <a href="https://github.com/OpenCloudGaming/OpenNOW/releases">
-    <img src="https://img.shields.io/github/v/tag/OpenCloudGaming/OpenNOW?style=for-the-badge&label=Download&color=brightgreen" alt="Download">
-  </a>
-  <a href="https://opennow.zortos.me">
-    <img src="https://img.shields.io/badge/Docs-opennow.zortos.me-blue?style=for-the-badge" alt="Documentation">
-  </a>
-  <a href="https://github.com/OpenCloudGaming/OpenNOW/actions/workflows/auto-build.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/OpenCloudGaming/OpenNOW/auto-build.yml?style=for-the-badge&label=Auto%20Build" alt="Auto Build">
-  </a>
-  <a href="https://discord.gg/8EJYaJcNfD">
-    <img src="https://img.shields.io/badge/Discord-Join%20Us-7289da?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/OpenCloudGaming/OpenNOW/stargazers">
-    <img src="https://img.shields.io/github/stars/OpenCloudGaming/OpenNOW?style=flat-square" alt="Stars">
-  </a>
-  <a href="https://github.com/OpenCloudGaming/OpenNOW/releases">
-    <img src="https://img.shields.io/github/downloads/OpenCloudGaming/OpenNOW/total?style=flat-square" alt="Downloads">
-  </a>
-  <a href="https://github.com/OpenCloudGaming/OpenNOW/blob/dev/LICENSE">
-    <img src="https://img.shields.io/github/license/OpenCloudGaming/OpenNOW?style=flat-square" alt="License">
-  </a>
-</p>
+This explains how to build OpenNOW for Android. The Android build uses
+Capacitor to wrap the existing React renderer inside a native Android WebView.
+The native Kotlin plugin (android-plugin/GfnPlugin.kt) handles the parts that
+cannot run in a browser: auth token storage, HTTP requests to NVIDIA's backend,
+and WebSocket signaling.
 
 ---
 
-> **Warning**  
-> OpenNOW is under active development. Bugs and performance issues are expected while features are finalized.
+## What you need
+
+- Node.js 20+
+- Android Studio (Electric Eel or newer)
+- JDK 17
+- Android SDK with API level 33 or higher
 
 ---
 
-## What is OpenNOW?
+## Step 1 -- Install Capacitor
 
-OpenNOW is a community-built desktop client for [NVIDIA GeForce NOW](https://www.nvidia.com/en-us/geforce-now/), built with Electron and TypeScript. It gives you a fully open-source, cross-platform alternative to the official app — with zero telemetry, full transparency, and features the official client doesn't have.
+Run these commands inside opennow-stable/:
 
-- 🔓 **Fully open source** — audit every line, fork it, improve it
-- 🚫 **No telemetry** — OpenNOW collects nothing
-- 🖥️ **Cross-platform** — Windows, macOS, Linux, and ARM64
-- ⚡ **Community-driven** — faster fixes, transparent development
-- 🎮 **Anti-AFK, Stats Overlay, Adjustable Shortcuts** — power-user features built in
-
-## OpenNOW vs Official GeForce NOW
-
-| Feature | OpenNOW | Official GFN | Notes |
-|---------|:-------:|:------------:|-------|
-| **Streaming** | | | |
-| WebRTC Streaming | ✅ | ✅ | Chromium-based in OpenNOW |
-| H.264 Codec | ✅ | ✅ | |
-| H.265 / HEVC Codec | ✅ | ✅ | Full support |
-| AV1 Codec | ✅ | ✅ | |
-| Up to 1080p | ✅ | ✅ | |
-| Up to 4K | ✅ | ✅ | Configurable in settings |
-| 5K Resolution | ✅ | ✅ | Up to 5K@120fps |
-| 120+ FPS | ✅ | ✅ | Configurable: 30/60/120/144/240 |
-| HDR Streaming | 📋 | ✅ | 10-bit color supported, full HDR pipeline planned |
-| AI-Enhanced Stream Mode | ❌ | ✅ | NVIDIA Cinematic Quality — not available |
-| Adjustable Bitrate | ✅ | ✅ | Up to 200 Mbps in OpenNOW |
-| Color Quality (8/10-bit, 4:2:0/4:4:4) | ✅ | ✅ | Full chroma/bit-depth control |
-| **Input** | | | |
-| Keyboard + Mouse | ✅ | ✅ | Full input over GFN data channels |
-| Gamepad Support | ✅ | ✅ | Up to 4 controllers simultaneously |
-| Flight Controls | ❌ | ✅ | Added in official client v2.0.81 |
-| Mouse Sensitivity | ✅ | ❌ | OpenNOW-exclusive setting |
-| Clipboard Paste | ✅ | ❌ | Paste text into cloud session |
-| **Features** | | | |
-| Authentication + Session Restore | ✅ | ✅ | OAuth PKCE, auto-restore on startup |
-| Game Library + Catalog | ✅ | ✅ | Main catalog, library, and public games |
-| Alliance Partners | ✅ | ✅ | NVIDIA + partner providers |
-| Audio Playback | ✅ | ✅ | |
-| Microphone Support | ✅ | ✅ | Voice chat with mute/unmute toggle |
-| Instant Replay | 📋 | ✅ | Planned for future release |
-| Screenshots | 📋 | ✅ | Planned for future release |
-| Stats Overlay | ✅ | ✅ | Detailed: RTT, decode, render, jitter, loss, input queue |
-| Anti-AFK | ✅ | ❌ | OpenNOW-exclusive — prevents idle disconnects |
-| Adjustable Shortcuts | ✅ | 🚧 | Fully customizable in OpenNOW |
-| Session Conflict Resolution | ✅ | ✅ | Resume / New / Cancel existing sessions |
-| Subscription Info | ✅ | ✅ | Hours, tier, entitled resolutions |
-| Region Selection | ✅ | ✅ | Dynamic region discovery |
-| Install-to-Play | ✅ | ✅ | For games not in standard catalog |
-| Discord Integration | ❌ | ✅ | |
-| **Platform Support** | | | |
-| Windows | ✅ | ✅ | NSIS installer + portable |
-| macOS (x64 + ARM) | ✅ | ✅ | Universal builds |
-| Linux | ✅ | 🚧 | Official client has beta native app |
-| ARM64 / Raspberry Pi | ✅ | ❌ | OpenNOW builds for ARM64 Linux |
-| Steam Deck | 📋 | ✅ | |
-| Android / iOS / TV | ❌ | ✅ | Desktop-only for now |
-| **Privacy & Openness** | | | |
-| Open Source | ✅ | ❌ | MIT licensed |
-| No Telemetry | ✅ | ❌ | Zero data collection |
-| Auditable Code | ✅ | ❌ | |
-
-> 💡 **Legend:** ✅ Working  ·  🚧 In Progress  ·  📋 Planned  ·  ❌ Not Available
-
-## Roadmap
-
-| Priority | Feature | Status | Description |
-|:--------:|---------|:------:|-------------|
-| 🔴 | ~~H.265 codec tuning~~ | ✅ Completed | Full HEVC support implemented |
-| 🔴 | ~~Microphone support~~ | ✅ Completed | Voice chat with mute/unmute toggle |
-| 🟡 | Instant replay | 📋 Planned | Clip and save gameplay moments |
-| 🟡 | Screenshots | 📋 Planned | Capture in-stream screenshots |
-| 🟡 | HDR streaming pipeline | 📋 Planned | Full HDR end-to-end support |
-| 🟢 | Latency optimizations | 🚧 Ongoing | Input and render path improvements |
-| 🟢 | Platform stability | 🚧 Ongoing | Cross-platform bug fixes |
-
-> 🔴 High priority · 🟡 Medium priority · 🟢 Ongoing effort
-
-## Features
-
-**Streaming**
-`H.264` `AV1` `H.265 (WIP)` · Up to 4K@240fps · Adjustable bitrate · 8/10-bit color · 4:2:0/4:4:4 chroma
-
-**Input**
-`Keyboard` `Mouse` `Gamepad ×4` · Mouse sensitivity · Clipboard paste
-
-**Client**
-`Stats Overlay` `Anti-AFK` `Adjustable Shortcuts` · OAuth + session restore · Region selection · Alliance partners
-
-**Platforms**
-`Windows` `macOS` `Linux` `ARM64` · Installer, portable, AppImage, deb, dmg
-
-## Platform Support
-
-| Platform | Status | Builds |
-|----------|:------:|--------|
-| Windows | ✅ Working | NSIS installer + portable |
-| macOS | ✅ Working | dmg + zip (x64 and arm64) |
-| Linux x64 | ✅ Working | AppImage + deb |
-| Linux ARM64 | 🚧 Experimental | AppImage + deb (Raspberry Pi 4/5) |
-
-## Quick Start
-
-```bash
-git clone https://github.com/OpenCloudGaming/OpenNOW.git
-cd OpenNOW/opennow-stable
-npm install
-npm run dev
+```powershell
+cd opennow-stable
+npm install @capacitor/core @capacitor/android @capacitor/splash-screen
 ```
 
-See [opennow-stable/README.md](./opennow-stable/README.md) for build and packaging details.
+---
 
-## Download
+## Step 2 -- Build the web app
 
-Grab the latest release for your platform:
-
-👉 **[Download from GitHub Releases](https://github.com/OpenCloudGaming/OpenNOW/releases)**
-
-| Platform | File |
-|----------|------|
-| Windows (installer) | `OpenNOW-v0.2.4-setup-x64.exe` |
-| Windows (portable) | `OpenNOW-v0.2.4-portable-x64.exe` |
-| macOS (x64) | `OpenNOW-v0.2.4-mac-x64.dmg` |
-| macOS (ARM) | `OpenNOW-v0.2.4-mac-arm64.dmg` |
-| Linux (x64) | `OpenNOW-v0.2.4-linux-x86_64.AppImage` |
-| Linux (ARM64) | `OpenNOW-v0.2.4-linux-arm64.AppImage` |
-
-## Architecture
-
-OpenNOW is an Electron app with three processes:
-
-| Layer | Technology | Role |
-|-------|-----------|------|
-| **Main** | Node.js + Electron | OAuth, CloudMatch API, WebSocket signaling, settings |
-| **Renderer** | React 19 + TypeScript | UI, WebRTC streaming, input encoding, stats |
-| **Preload** | Electron contextBridge | Secure IPC between main and renderer |
-
-```
-opennow-stable/src/
-├── main/           # Electron main process
-│   ├── gfn/        # Auth, CloudMatch, signaling, games, subscription
-│   ├── index.ts    # Entry point, IPC handlers, window management
-│   └── settings.ts # Persistent user settings
-├── renderer/src/   # React UI
-│   ├── components/ # Login, Home, Library, Settings, StreamView
-│   ├── gfn/        # WebRTC client, SDP, input protocol
-│   └── App.tsx     # Root component with routing and state
-├── shared/         # Shared types and IPC channel definitions
-│   ├── gfn.ts      # All TypeScript interfaces
-│   └── ipc.ts      # IPC channel constants
-└── preload/        # Context bridge (safe API exposure)
+```powershell
+npm run build
 ```
 
-## FAQ
+This writes the compiled renderer to dist/. Capacitor copies this folder
+into the Android project so the WebView loads it without a network request.
 
-**Is this the official GeForce NOW client?**
-No. OpenNOW is a community-built alternative. It uses the same NVIDIA streaming infrastructure but is not affiliated with or endorsed by NVIDIA.
+---
 
-**Was this project built in Rust before?**
-Yes. OpenNOW originally used Rust/Tauri but switched to Electron for better cross-platform compatibility and faster development.
+## Step 3 -- Add the Android platform
 
-**Does OpenNOW collect any data?**
-No. OpenNOW has zero telemetry. Your credentials are stored locally and only sent to NVIDIA's authentication servers.
+```powershell
+npx cap add android
+```
 
-## Contributing
+This creates the android/ folder with the Gradle project, MainActivity,
+and the WebView configuration.
 
-Contributions are welcome! Open an issue or PR on [GitHub](https://github.com/OpenCloudGaming/OpenNOW).
+---
 
-## Support Me
+## Step 4 -- Copy the Kotlin plugin files
 
-<p align="center">
-  <a href="https://github.com/sponsors/zortos293">
-    <img src="https://img.shields.io/badge/Support%20Me-GitHub%20Sponsors-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Support Me">
-  </a>
-</p>
+Copy both files from android-plugin/ into your Android source tree:
 
-## License
+```powershell
+$dest = "android\app\src\main\java\com\zortos\opennow"
+New-Item -ItemType Directory -Force -Path $dest
+Copy-Item android-plugin\GfnPlugin.kt $dest\
+Copy-Item android-plugin\AndroidSignalingManager.kt $dest\
+```
 
-[MIT](./LICENSE) © Zortos
+---
+
+## Step 5 -- Register the plugin and OAuth redirect in MainActivity
+
+Open android/app/src/main/java/com/zortos/opennow/MainActivity.kt
+and replace its contents with this:
+
+```kotlin
+package com.zortos.opennow
+
+import android.content.Intent
+import android.os.Bundle
+import com.getcapacitor.BridgeActivity
+
+class MainActivity : BridgeActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        registerPlugin(GfnPlugin::class.java)
+        super.onCreate(savedInstanceState)
+    }
+
+    // Receive the opennow://auth?code=... redirect from the system browser
+    // after the user logs in. Hands the URI to GfnPlugin to complete the
+    // OAuth PKCE token exchange.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val uri = intent.data ?: return
+        if (uri.scheme == "opennow" && uri.host == "auth") {
+            val plugin = bridge.getPlugin("GfnPlugin")?.getInstance() as? GfnPlugin
+            plugin?.handleOAuthRedirect(uri)
+        }
+    }
+}
+```
+
+---
+
+## Step 6 -- Add Gradle dependencies
+
+Open android/app/build.gradle and add to the dependencies block:
+
+```groovy
+implementation "com.squareup.okhttp3:okhttp:4.12.0"
+implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0"
+implementation "androidx.security:security-crypto:1.1.0-alpha06"
+```
+
+---
+
+## Step 7 -- Add the OAuth redirect intent filter
+
+Open android/app/src/main/AndroidManifest.xml and add this inside the
+<activity> tag so the app catches the opennow://auth redirect after login:
+
+```xml
+<intent-filter android:autoVerify="false">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="opennow" android:host="auth" />
+</intent-filter>
+```
+
+---
+
+## Step 8 -- Sync and open in Android Studio
+
+```powershell
+npx cap sync android
+npx cap open android
+```
+
+Then press Run in Android Studio to build and install the APK on a device
+or emulator. To build from the command line instead:
+
+```powershell
+cd android
+.\gradlew assembleDebug
+```
+
+The APK will be at android\app\build\outputs\apk\debug\app-debug.apk.
+
+---
+
+## Feature status
+
+| Feature               | Status   | Notes                                                       |
+|-----------------------|----------|-------------------------------------------------------------|
+| UI / game library     | Done     | Full React renderer runs in the WebView                     |
+| WebRTC streaming      | Done     | WebView handles WebRTC natively via Chromium                |
+| Settings              | Done     | Stored in Android SharedPreferences                         |
+| Signaling (WebSocket) | Done     | AndroidSignalingManager.kt handles the WS connection        |
+| Login (OAuth PKCE)    | Done     | Browser opens, redirect caught by onNewIntent, tokens saved |
+| Token refresh         | Done     | Refreshed on startup, stored in EncryptedSharedPreferences  |
+| Touch input           | Done     | TouchInputHandler maps touch to GFN mouse protocol          |
+| Virtual gamepad       | Done     | TouchGamepad.tsx overlaid during streaming on Android       |
+| Session management    | Partial  | create/poll/stop done; claimSession stub only               |
+| Subscription info     | Pending  | Requires fetchSubscription Kotlin impl                      |
+
+---
+
+## How login works end to end
+
+1. The renderer calls getPlatformApi().login(). On Android this calls
+   GfnPlugin.login() via Capacitor.
+
+2. GfnPlugin generates a PKCE verifier + challenge, stores the pending
+   PluginCall reference, and opens the NVIDIA login page in the system
+   browser via Intent.ACTION_VIEW.
+
+3. The user logs in. NVIDIA redirects the browser to opennow://auth?code=...
+
+4. Android routes the opennow:// URI back to MainActivity.onNewIntent().
+
+5. MainActivity calls plugin.handleOAuthRedirect(uri).
+
+6. GfnPlugin exchanges the code for tokens (PKCE token exchange against
+   https://login.nvidia.com/token), saves them in EncryptedSharedPreferences,
+   and resolves the original Capacitor PluginCall with the session object.
+
+7. The renderer receives the AuthSession and proceeds to load the game list.
+
+---
+
+## Project structure after Android is added
+
+```
+opennow-stable/
+  android/                   <- generated by npx cap add android
+    app/src/main/java/
+      com/zortos/opennow/
+        MainActivity.kt      <- register plugin + onNewIntent wiring
+        GfnPlugin.kt         <- copied from android-plugin/
+        AndroidSignalingManager.kt
+  android-plugin/            <- source of truth for Kotlin files
+    GfnPlugin.kt
+    AndroidSignalingManager.kt
+  capacitor.config.json      <- Capacitor configuration
+  src/renderer/src/platform/
+    detect.ts                <- Electron vs Capacitor vs web detection
+    api.ts                   <- unified API bridge for both platforms
+    index.ts                 <- re-exports
+  src/renderer/src/gfn/
+    touchInput.ts            <- touch-to-mouse translation for Android
+  src/renderer/src/components/
+    TouchGamepad.tsx         <- on-screen virtual gamepad for Android
+```
