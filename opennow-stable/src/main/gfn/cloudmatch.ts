@@ -19,6 +19,8 @@ import {
 import type { CloudMatchRequest, CloudMatchResponse, GetSessionsResponse } from "./types";
 import { SessionError } from "./errorCodes";
 
+import { buildDeviceHeaders } from "@shared/deviceHeaders";
+
 const GFN_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 NVIDIACEFClient/HEAD/debb5919f6 GFN-PC/2.0.80.173";
 const GFN_CLIENT_VERSION = "2.0.80.173";
@@ -286,24 +288,8 @@ function buildSignalingUrl(
 function requestHeaders(token: string): Record<string, string> {
   const clientId = crypto.randomUUID();
   const deviceId = crypto.randomUUID();
-
-  return {
-    "User-Agent": GFN_USER_AGENT,
-    Authorization: `GFNJWT ${token}`,
-    "Content-Type": "application/json",
-    Origin: "https://play.geforcenow.com",
-    Referer: "https://play.geforcenow.com/",
-    "nv-browser-type": "CHROME",
-    "nv-client-id": clientId,
-    "nv-client-streamer": "NVIDIA-CLASSIC",
-    "nv-client-type": "NATIVE",
-    "nv-client-version": GFN_CLIENT_VERSION,
-    "nv-device-make": "UNKNOWN",
-    "nv-device-model": "UNKNOWN",
-    "nv-device-os": process.platform === "win32" ? "WINDOWS" : process.platform === "darwin" ? "MACOS" : "LINUX",
-    "nv-device-type": "DESKTOP",
-    "x-device-id": deviceId,
-  };
+  // Use the shared device header builder so Android and desktop stay in sync.
+  return buildDeviceHeaders(token, clientId, deviceId, false);
 }
 
 function parseResolution(input: string): { width: number; height: number } {
@@ -654,18 +640,7 @@ export async function getActiveSessions(
     : streamingBaseUrl.trim();
   const url = `${base}/v2/session`;
 
-  const headers: Record<string, string> = {
-    "User-Agent": GFN_USER_AGENT,
-    Authorization: `GFNJWT ${token}`,
-    "Content-Type": "application/json",
-    "nv-client-id": clientId,
-    "nv-client-streamer": "NVIDIA-CLASSIC",
-    "nv-client-type": "NATIVE",
-    "nv-client-version": GFN_CLIENT_VERSION,
-    "nv-device-os": process.platform === "win32" ? "WINDOWS" : process.platform === "darwin" ? "MACOS" : "LINUX",
-    "nv-device-type": "DESKTOP",
-    "x-device-id": deviceId,
-  };
+  const headers = buildDeviceHeaders(token, clientId, deviceId, false);
 
   const response = await fetch(url, {
     method: "GET",
@@ -861,21 +836,7 @@ export async function claimSession(input: SessionClaimRequest): Promise<SessionI
   };
 
   const payload = buildClaimRequestBody(input.sessionId, appId, settings);
-
-  const headers: Record<string, string> = {
-    "User-Agent": GFN_USER_AGENT,
-    Authorization: `GFNJWT ${input.token}`,
-    "Content-Type": "application/json",
-    Origin: "https://play.geforcenow.com",
-    Referer: "https://play.geforcenow.com/",
-    "nv-client-id": clientId,
-    "nv-client-streamer": "NVIDIA-CLASSIC",
-    "nv-client-type": "NATIVE",
-    "nv-client-version": GFN_CLIENT_VERSION,
-    "nv-device-os": process.platform === "win32" ? "WINDOWS" : process.platform === "darwin" ? "MACOS" : "LINUX",
-    "nv-device-type": "DESKTOP",
-    "x-device-id": deviceId,
-  };
+  const headers = buildDeviceHeaders(input.token, clientId, deviceId, false);
 
   // Send claim request
   const response = await fetch(claimUrl, {

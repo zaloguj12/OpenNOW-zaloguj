@@ -1,0 +1,100 @@
+ANDROID SUPPORT PROGRESS LOG
+==============================
+Date started: 2026-02-19
+Branch: Android (off main)
+Repo: D:\Projects\gfnclient\opennow (git remote: github.com/OpenCloudGaming/OpenNOW)
+
+WHAT WAS DONE
+--------------
+Added full Android / Capacitor support to the renderer layer of opennow-stable.
+
+Files ADDED:
+  src/renderer/src/platform/detect.ts
+    - Detects whether we are running in Electron, Capacitor (Android), or plain web.
+    - Exports: PLATFORM, isElectron, isAndroid, isWeb
+
+  src/renderer/src/platform/api.ts
+    - Platform API bridge. On Electron it forwards to window.openNow.
+    - On Android / Capacitor it calls the native GfnPlugin via @capacitor/core.
+    - The GfnPlugin needs to be implemented in Kotlin in the android/ folder (see NEXT STEPS).
+    - Exports: getPlatformApi()
+
+  src/renderer/src/platform/index.ts
+    - Re-exports everything from detect.ts and api.ts for clean imports.
+
+  src/renderer/src/gfn/touchInput.ts
+    - Translates touch events on the video element into GFN mouse/gamepad packets.
+    - Single finger drag -> relative mouse movement
+    - Single tap -> left click
+    - Double tap -> right click
+    - Two-finger swipe -> scroll wheel
+    - Exposes pressButton / releaseButton / setStick for the on-screen gamepad.
+    - Class: TouchInputHandler
+
+  src/renderer/src/components/TouchGamepad.tsx
+    - On-screen virtual gamepad for Android (hidden on desktop).
+    - D-pad, two thumbsticks, face buttons A/B/X/Y, LB/RB/LT/RT, Start/Back.
+    - Driven by GfnWebRtcClient.sendGamepadButton / sendGamepadStick.
+    - Renders only when `visible` prop is true.
+
+Files MODIFIED:
+  src/renderer/src/App.tsx
+    - Changed all window.openNow calls to use getPlatformApi() from ./platform/index.
+    - Added isAndroid import from ./platform/detect.
+    - Added TouchInputHandler and TouchGamepad imports.
+    - On Android, pointer lock is skipped (touch screens don't use it).
+    - On Android, after WebRTC offer is handled, TouchInputHandler is attached to the video element.
+    - Added TouchGamepad component, visible only when isAndroid && streamStatus === "streaming".
+    - Keyboard shortcuts are skipped on Android (no physical keyboard).
+
+  src/renderer/src/styles.css
+    - Added .tgp-* CSS classes for the on-screen virtual gamepad layout.
+    - Includes: .tgp, .tgp-side, .tgp-dpad, .tgp-stick, .tgp-face-btn, .tgp-shoulder, etc.
+
+  src/renderer/src/gfn/webrtcClient.ts
+    - Already had Android helper methods (sendRelativeMouseMove, sendMouseButtonDown,
+      sendMouseButtonUp, sendMouseWheel, sendGamepadButton, sendGamepadStick).
+      No changes needed.
+
+Files NOT YET DONE (required for actual Android APK build):
+  android/                  <- Capacitor Android project (run: npx cap add android)
+  android/.../GfnPlugin.kt  <- Kotlin plugin that implements all OpenNowApi methods
+                               (auth, session, signaling, settings) using OkHttp
+  capacitor.config.ts       <- Capacitor config pointing to webDir: dist/
+
+NEXT STEPS TO COMPLETE ANDROID BUILD
+--------------------------------------
+1. In opennow-stable/, install Capacitor:
+      npm install @capacitor/core @capacitor/android --save
+
+2. Create capacitor.config.ts in opennow-stable/:
+      {
+        appId: "com.zortos.opennow",
+        appName: "OpenNOW",
+        webDir: "dist",
+        server: { androidScheme: "https" }
+      }
+
+3. Build the web assets:
+      npm run build
+
+4. Add Android platform:
+      npx cap add android
+
+5. Create the Kotlin GfnPlugin (mirrors all OpenNowApi methods from shared/gfn.ts).
+   Must implement:
+   - OAuth PKCE login via Chrome Custom Tab
+   - Auth token storage via Android SharedPreferences or EncryptedSharedPreferences
+   - CloudMatch HTTP calls (createSession, pollSession, stopSession, etc.)
+   - WebSocket signaling (GfnSignalingClient port to Kotlin / OkHttp WebSocket)
+   - Settings storage
+   - Capacitor event forwarding for signalingEvent
+
+6. Register the plugin in MainActivity.kt.
+
+7. Sync and build APK:
+      npx cap sync android
+      npx cap open android   (opens in Android Studio)
+      or: cd android && ./gradlew assembleDebug
+
+STATUS: Renderer layer complete. Native Kotlin plugin not yet written.

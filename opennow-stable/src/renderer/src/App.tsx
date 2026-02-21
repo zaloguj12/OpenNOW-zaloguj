@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { getPlatformApi } from "./platform/index";
+import { isAndroid } from "./platform/detect";
+import { TouchGamepad } from "./components/TouchGamepad";
+import { TouchInputHandler } from "./gfn/touchInput";
+
 import type {
   ActiveSessionInfo,
   AuthSession,
@@ -342,6 +347,7 @@ export function App(): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clientRef = useRef<GfnWebRtcClient | null>(null);
+  const touchHandlerRef = useRef<TouchInputHandler | null>(null);
   const sessionRef = useRef<SessionInfo | null>(null);
   const hasInitializedRef = useRef(false);
   const regionsRequestRef = useRef(0);
@@ -372,7 +378,7 @@ export function App(): JSX.Element {
   const loadSubscriptionInfo = useCallback(
     async (session: AuthSession): Promise<void> => {
       const token = session.tokens.idToken ?? session.tokens.accessToken;
-      const subscription = await window.openNow.fetchSubscription({
+      const subscription = await getPlatformApi().fetchSubscription({
         token,
         providerStreamingBaseUrl: session.provider.streamingServiceUrl,
         userId: session.user.userId,
@@ -393,7 +399,7 @@ export function App(): JSX.Element {
       return;
     }
     try {
-      const activeSessions = await window.openNow.getActiveSessions(token, effectiveStreamingBaseUrl);
+      const activeSessions = await getPlatformApi().getActiveSessions(token, effectiveStreamingBaseUrl);
       const candidate = activeSessions.find((entry) => entry.status === 3 || entry.status === 2) ?? null;
       setNavbarActiveSession(candidate);
     } catch (error) {
@@ -426,15 +432,15 @@ export function App(): JSX.Element {
     const initialize = async () => {
       try {
         // Load settings first
-        const loadedSettings = await window.openNow.getSettings();
+        const loadedSettings = await getPlatformApi().getSettings();
         setSettings(loadedSettings);
         setSettingsLoaded(true);
 
         // Load providers and session (force refresh on startup restore)
         setStartupStatusMessage("Restoring saved session and refreshing token...");
         const [providerList, sessionResult] = await Promise.all([
-          window.openNow.getLoginProviders(),
-          window.openNow.getAuthSession({ forceRefresh: true }),
+          getPlatformApi().getLoginProviders(),
+          getPlatformApi().getAuthSession({ forceRefresh: true }),
         ]);
         const persistedSession = sessionResult.session;
 
@@ -469,7 +475,7 @@ export function App(): JSX.Element {
         if (persistedSession) {
           // Load regions
           const token = persistedSession.tokens.idToken ?? persistedSession.tokens.accessToken;
-          const discovered = await window.openNow.getRegions({ token });
+          const discovered = await getPlatformApi().getRegions({ token });
           setRegions(discovered);
 
           try {
@@ -481,7 +487,7 @@ export function App(): JSX.Element {
 
           // Load games
           try {
-            const mainGames = await window.openNow.fetchMainGames({
+            const mainGames = await getPlatformApi().fetchMainGames({
               token,
               providerStreamingBaseUrl: persistedSession.provider.streamingServiceUrl,
             });
@@ -496,20 +502,20 @@ export function App(): JSX.Element {
             );
 
             // Also load library
-            const libGames = await window.openNow.fetchLibraryGames({
+            const libGames = await getPlatformApi().fetchLibraryGames({
               token,
               providerStreamingBaseUrl: persistedSession.provider.streamingServiceUrl,
             });
             setLibraryGames(libGames);
           } catch {
             // Fallback to public games
-            const publicGames = await window.openNow.fetchPublicGames();
+            const publicGames = await getPlatformApi().fetchPublicGames();
             setGames(publicGames);
             setSource("public");
           }
         } else {
           // Load public games for non-logged in users
-          const publicGames = await window.openNow.fetchPublicGames();
+          const publicGames = await getPlatformApi().fetchPublicGames();
           setGames(publicGames);
           setSource("public");
           setSubscriptionInfo(null);
@@ -530,11 +536,11 @@ export function App(): JSX.Element {
       const parsed = normalizeShortcut(value);
       return parsed.valid ? parsed : normalizeShortcut(fallback);
     };
-    const toggleStats = parseWithFallback(settings.shortcutToggleStats, DEFAULT_SHORTCUTS.shortcutToggleStats);
-    const togglePointerLock = parseWithFallback(settings.shortcutTogglePointerLock, DEFAULT_SHORTCUTS.shortcutTogglePointerLock);
-    const stopStream = parseWithFallback(settings.shortcutStopStream, DEFAULT_SHORTCUTS.shortcutStopStream);
-    const toggleAntiAfk = parseWithFallback(settings.shortcutToggleAntiAfk, DEFAULT_SHORTCUTS.shortcutToggleAntiAfk);
-    const toggleMicrophone = parseWithFallback(settings.shortcutToggleMicrophone, DEFAULT_SHORTCUTS.shortcutToggleMicrophone);
+    const toggleStats        = parseWithFallback(settings.shortcutToggleStats,        DEFAULT_SHORTCUTS.shortcutToggleStats);
+    const togglePointerLock  = parseWithFallback(settings.shortcutTogglePointerLock,  DEFAULT_SHORTCUTS.shortcutTogglePointerLock);
+    const stopStream         = parseWithFallback(settings.shortcutStopStream,         DEFAULT_SHORTCUTS.shortcutStopStream);
+    const toggleAntiAfk      = parseWithFallback(settings.shortcutToggleAntiAfk,      DEFAULT_SHORTCUTS.shortcutToggleAntiAfk);
+    const toggleMicrophone   = parseWithFallback(settings.shortcutToggleMicrophone,   DEFAULT_SHORTCUTS.shortcutToggleMicrophone);
     return { toggleStats, togglePointerLock, stopStream, toggleAntiAfk, toggleMicrophone };
   }, [
     settings.shortcutToggleStats,
@@ -545,6 +551,9 @@ export function App(): JSX.Element {
   ]);
 
   const requestEscLockedPointerCapture = useCallback(async (target: HTMLVideoElement) => {
+    // Touch screens don't use pointer lock -- skip entirely on Android.
+    if (isAndroid) return;
+
     if (!document.fullscreenElement) {
       await document.documentElement.requestFullscreen().catch(() => {});
     }
@@ -576,7 +585,6 @@ export function App(): JSX.Element {
   const requestExitPrompt = useCallback((gameTitle: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (exitPromptResolverRef.current) {
-        // Close any previous pending prompt to avoid dangling promises.
         exitPromptResolverRef.current(false);
       }
       exitPromptResolverRef.current = resolve;
@@ -604,10 +612,9 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  // Listen for F11 fullscreen toggle from main process (uses W3C Fullscreen API
-  // so navigator.keyboard.lock() can capture Escape in fullscreen)
+  // Listen for F11 fullscreen toggle from main process
   useEffect(() => {
-    const unsubscribe = window.openNow.onToggleFullscreen(() => {
+    const unsubscribe = getPlatformApi().onToggleFullscreen(() => {
       if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       } else {
@@ -631,7 +638,6 @@ export function App(): JSX.Element {
   // Restore focus to video element when navigating away from Settings during streaming
   useEffect(() => {
     if (streamStatus === "streaming" && currentPage !== "settings" && videoRef.current) {
-      // Small delay to let React finish rendering the new page
       const timer = window.setTimeout(() => {
         if (videoRef.current && document.activeElement !== videoRef.current) {
           videoRef.current.focus();
@@ -669,7 +675,7 @@ export function App(): JSX.Element {
 
   // Signaling events
   useEffect(() => {
-    const unsubscribe = window.openNow.onSignalingEvent(async (event: MainToRendererSignalingEvent) => {
+    const unsubscribe = getPlatformApi().onSignalingEvent(async (event: MainToRendererSignalingEvent) => {
       console.log(`[App] Signaling event: ${event.type}`, event.type === "offer" ? `(SDP ${event.sdp.length} chars)` : "", event.type === "remote-ice" ? event.candidate : "");
       try {
         if (event.type === "offer") {
@@ -726,11 +732,19 @@ export function App(): JSX.Element {
             setLaunchError(null);
             setStreamStatus("streaming");
             setSessionStartedAtMs((current) => current ?? Date.now());
+
+            // On Android, set up touch-to-mouse translation on the video element.
+            if (isAndroid && videoRef.current && clientRef.current) {
+              touchHandlerRef.current?.dispose();
+              touchHandlerRef.current = new TouchInputHandler(videoRef.current, clientRef.current);
+            }
           }
         } else if (event.type === "remote-ice") {
           await clientRef.current?.addRemoteCandidate(event.candidate);
         } else if (event.type === "disconnected") {
           console.warn("Signaling disconnected:", event.reason);
+          touchHandlerRef.current?.dispose();
+          touchHandlerRef.current = null;
           clientRef.current?.dispose();
           clientRef.current = null;
           setStreamStatus("idle");
@@ -758,7 +772,7 @@ export function App(): JSX.Element {
   const updateSetting = useCallback(async <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     if (settingsLoaded) {
-      await window.openNow.setSetting(key, value);
+      await getPlatformApi().setSetting(key, value);
     }
   }, [settingsLoaded]);
 
@@ -767,13 +781,13 @@ export function App(): JSX.Element {
     setIsLoggingIn(true);
     setLoginError(null);
     try {
-      const session = await window.openNow.login({ providerIdpId: providerIdpId || undefined });
+      const session = await getPlatformApi().login({ providerIdpId: providerIdpId || undefined });
       setAuthSession(session);
       setProviderIdpId(session.provider.idpId);
 
       // Load regions
       const token = session.tokens.idToken ?? session.tokens.accessToken;
-      const discovered = await window.openNow.getRegions({ token });
+      const discovered = await getPlatformApi().getRegions({ token });
       setRegions(discovered);
 
       try {
@@ -784,7 +798,7 @@ export function App(): JSX.Element {
       }
 
       // Load games
-      const mainGames = await window.openNow.fetchMainGames({
+      const mainGames = await getPlatformApi().fetchMainGames({
         token,
         providerStreamingBaseUrl: session.provider.streamingServiceUrl,
       });
@@ -793,7 +807,7 @@ export function App(): JSX.Element {
       setSelectedGameId(mainGames[0]?.id ?? "");
 
       // Load library
-      const libGames = await window.openNow.fetchLibraryGames({
+      const libGames = await getPlatformApi().fetchLibraryGames({
         token,
         providerStreamingBaseUrl: session.provider.streamingServiceUrl,
       });
@@ -807,7 +821,7 @@ export function App(): JSX.Element {
 
   // Logout handler
   const handleLogout = useCallback(async () => {
-    await window.openNow.logout();
+    await getPlatformApi().logout();
     setAuthSession(null);
     setGames([]);
     setLibraryGames([]);
@@ -816,7 +830,7 @@ export function App(): JSX.Element {
     setLaunchError(null);
     setSubscriptionInfo(null);
     setCurrentPage("home");
-    const publicGames = await window.openNow.fetchPublicGames();
+    const publicGames = await getPlatformApi().fetchPublicGames();
     setGames(publicGames);
     setSource("public");
   }, []);
@@ -830,12 +844,12 @@ export function App(): JSX.Element {
 
       let result: GameInfo[] = [];
       if (targetSource === "main" && token) {
-        result = await window.openNow.fetchMainGames({ token, providerStreamingBaseUrl: baseUrl });
+        result = await getPlatformApi().fetchMainGames({ token, providerStreamingBaseUrl: baseUrl });
       } else if (targetSource === "library" && token) {
-        result = await window.openNow.fetchLibraryGames({ token, providerStreamingBaseUrl: baseUrl });
+        result = await getPlatformApi().fetchLibraryGames({ token, providerStreamingBaseUrl: baseUrl });
         setLibraryGames(result);
       } else if (targetSource === "public") {
-        result = await window.openNow.fetchPublicGames();
+        result = await getPlatformApi().fetchPublicGames();
       }
 
       if (targetSource !== "library") {
@@ -859,7 +873,7 @@ export function App(): JSX.Element {
       throw new Error("Active session is missing server address. Start the game again to create a new session.");
     }
 
-    const claimed = await window.openNow.claimSession({
+    const claimed = await getPlatformApi().claimSession({
       token,
       streamingBaseUrl: effectiveStreamingBaseUrl,
       serverIp: existingSession.serverIp,
@@ -886,7 +900,7 @@ export function App(): JSX.Element {
     sessionRef.current = claimed;
     setQueuePosition(undefined);
     setStreamStatus("connecting");
-    await window.openNow.connectSignaling({
+    await getPlatformApi().connectSignaling({
       sessionId: claimed.sessionId,
       signalingServer: claimed.signalingServer,
       signalingUrl: claimed.signalingUrl,
@@ -934,7 +948,7 @@ export function App(): JSX.Element {
 
       if (!appId && token) {
         try {
-          const resolved = await window.openNow.resolveLaunchAppId({
+          const resolved = await getPlatformApi().resolveLaunchAppId({
             token,
             providerStreamingBaseUrl: effectiveStreamingBaseUrl,
             appIdOrUuid: game.uuid ?? selectedVariantId,
@@ -954,7 +968,7 @@ export function App(): JSX.Element {
       // Check for active sessions first
       if (token) {
         try {
-          const activeSessions = await window.openNow.getActiveSessions(token, effectiveStreamingBaseUrl);
+          const activeSessions = await getPlatformApi().getActiveSessions(token, effectiveStreamingBaseUrl);
           if (activeSessions.length > 0) {
             const existingSession = activeSessions[0];
             await claimAndConnectSession(existingSession);
@@ -968,7 +982,7 @@ export function App(): JSX.Element {
       }
 
       // Create new session
-      const newSession = await window.openNow.createSession({
+      const newSession = await getPlatformApi().createSession({
         token: token || undefined,
         streamingBaseUrl: effectiveStreamingBaseUrl,
         appId,
@@ -987,12 +1001,7 @@ export function App(): JSX.Element {
       setSession(newSession);
       setQueuePosition(newSession.queuePosition);
 
-      // Poll for readiness.
-      // Queue mode (>1): no timeout - users wait indefinitely and see position updates.
-      // Setup/Starting mode (0, 1, or undefined): 180s timeout applies - machine is starting.
       let finalSession: SessionInfo | null = null;
-      // Only in queue mode if queuePosition > 1 (actually waiting in line)
-      // queuePosition 0 or 1 means machine is being allocated, not queue wait
       let isInQueueMode = (newSession.queuePosition ?? 0) > 1;
       let timeoutStartAttempt = 1;
       const maxAttempts = Math.ceil(SESSION_READY_TIMEOUT_MS / SESSION_READY_POLL_INTERVAL_MS);
@@ -1002,7 +1011,7 @@ export function App(): JSX.Element {
         attempt++;
         await sleep(SESSION_READY_POLL_INTERVAL_MS);
 
-        const polled = await window.openNow.pollSession({
+        const polled = await getPlatformApi().pollSession({
           token: token || undefined,
           streamingBaseUrl: newSession.streamingBaseUrl ?? effectiveStreamingBaseUrl,
           serverIp: newSession.serverIp,
@@ -1013,13 +1022,9 @@ export function App(): JSX.Element {
         setSession(polled);
         setQueuePosition(polled.queuePosition);
 
-        // Check if queue just cleared - transition from queue mode to setup mode
         const wasInQueueMode = isInQueueMode;
-        // Queue mode only when position > 1 (actually waiting behind others)
-        // Position 0 or 1 means machine allocation is starting
         isInQueueMode = (polled.queuePosition ?? 0) > 1;
         if (wasInQueueMode && !isInQueueMode) {
-          // Queue just cleared, start timeout counting from now
           timeoutStartAttempt = attempt;
         }
 
@@ -1032,26 +1037,20 @@ export function App(): JSX.Element {
           break;
         }
 
-        // Update status based on session state
         if (isInQueueMode) {
           updateLoadingStep("queue");
         } else if (polled.status === 1) {
           updateLoadingStep("setup");
         }
 
-        // Only check timeout when NOT in queue mode (i.e., during setup/starting)
         if (!isInQueueMode && attempt - timeoutStartAttempt >= maxAttempts) {
           throw new Error(`Session did not become ready in time (${Math.round(SESSION_READY_TIMEOUT_MS / 1000)}s)`);
         }
       }
 
-      // finalSession is guaranteed to be set here (we only exit the loop via break when session is ready)
-      // Timeout only applies during setup/starting phase, not during queue wait
-
       setQueuePosition(undefined);
       updateLoadingStep("connecting");
 
-      // Use the polled session data which has the latest signaling info
       const sessionToConnect = sessionRef.current ?? finalSession ?? newSession;
       console.log("Connecting signaling with:", {
         sessionId: sessionToConnect.sessionId,
@@ -1060,7 +1059,7 @@ export function App(): JSX.Element {
         status: sessionToConnect.status,
       });
 
-      await window.openNow.connectSignaling({
+      await getPlatformApi().connectSignaling({
         sessionId: sessionToConnect.sessionId,
         signalingServer: sessionToConnect.signalingServer,
         signalingUrl: sessionToConnect.signalingUrl,
@@ -1068,7 +1067,7 @@ export function App(): JSX.Element {
     } catch (error) {
       console.error("Launch failed:", error);
       setLaunchError(toLaunchErrorState(error, loadingStep));
-      await window.openNow.disconnectSignaling().catch(() => {});
+      await getPlatformApi().disconnectSignaling().catch(() => {});
       clientRef.current?.dispose();
       clientRef.current = null;
       setSession(null);
@@ -1123,7 +1122,7 @@ export function App(): JSX.Element {
     } catch (error) {
       console.error("Navbar resume failed:", error);
       setLaunchError(toLaunchErrorState(error, loadingStep));
-      await window.openNow.disconnectSignaling().catch(() => {});
+      await getPlatformApi().disconnectSignaling().catch(() => {});
       clientRef.current?.dispose();
       clientRef.current = null;
       setSession(null);
@@ -1152,12 +1151,12 @@ export function App(): JSX.Element {
   const handleStopStream = useCallback(async () => {
     try {
       resolveExitPrompt(false);
-      await window.openNow.disconnectSignaling();
+      await getPlatformApi().disconnectSignaling();
 
       const current = sessionRef.current;
       if (current) {
         const token = authSession?.tokens.idToken ?? authSession?.tokens.accessToken;
-        await window.openNow.stopSession({
+        await getPlatformApi().stopSession({
           token: token || undefined,
           streamingBaseUrl: current.streamingBaseUrl,
           serverIp: current.serverIp,
@@ -1166,6 +1165,8 @@ export function App(): JSX.Element {
         });
       }
 
+      touchHandlerRef.current?.dispose();
+      touchHandlerRef.current = null;
       clientRef.current?.dispose();
       clientRef.current = null;
       setSession(null);
@@ -1185,7 +1186,7 @@ export function App(): JSX.Element {
   }, [authSession, refreshNavbarActiveSession, resolveExitPrompt]);
 
   const handleDismissLaunchError = useCallback(async () => {
-    await window.openNow.disconnectSignaling().catch(() => {});
+    await getPlatformApi().disconnectSignaling().catch(() => {});
     clientRef.current?.dispose();
     clientRef.current = null;
     setSession(null);
@@ -1227,6 +1228,9 @@ export function App(): JSX.Element {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Android doesn't have a physical keyboard -- skip all shortcut handling.
+      if (isAndroid) return;
+
       const target = e.target as HTMLElement | null;
       const isTyping = !!target && (
         target.tagName === "INPUT" ||
@@ -1254,8 +1258,6 @@ export function App(): JSX.Element {
 
       const isPasteShortcut = e.key.toLowerCase() === "v" && !e.altKey && (isMac ? e.metaKey : e.ctrlKey);
       if (streamStatus === "streaming" && isPasteShortcut) {
-        // Always stop local/browser paste behavior while streaming.
-        // If clipboard paste is enabled, send clipboard text into the stream.
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -1330,7 +1332,6 @@ export function App(): JSX.Element {
       }
     };
 
-    // Use capture phase so app shortcuts run before stream input capture listeners.
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [
@@ -1468,6 +1469,13 @@ export function App(): JSX.Element {
             }}
           />
         )}
+
+        {/* On-screen gamepad -- only shown on Android while the stream is running */}
+        <TouchGamepad
+          clientRef={clientRef}
+          visible={isAndroid && streamStatus === "streaming"}
+        />
+
         {streamStatus !== "streaming" && (
           <StreamLoading
             gameTitle={streamingGame?.title ?? "Game"}

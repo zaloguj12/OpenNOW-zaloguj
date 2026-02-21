@@ -2856,6 +2856,123 @@ export class GfnWebRtcClient {
     return this.micState;
   }
 
+  // ── Touch / Android input helpers ───────────────────────────────────────
+  // These are thin public wrappers so TouchInputHandler can drive the same
+  // encoding path as keyboard/mouse without duplicating protocol details.
+
+  /**
+   * Send a relative mouse movement (used by touch drag).
+   * dx/dy are in pixels, already scaled by the caller.
+   */
+  public sendRelativeMouseMove(dx: number, dy: number): void {
+    if (!this.inputReady) return;
+    const payload = this.inputEncoder.encodeMouseMove({
+      dx: Math.max(-32768, Math.min(32767, dx)),
+      dy: Math.max(-32768, Math.min(32767, dy)),
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    });
+    this.sendReliable(payload);
+  }
+
+  /**
+   * Send a mouse button down event (1=left, 2=middle, 3=right).
+   * Used by the touch tap handler.
+   */
+  public sendMouseButtonDown(button: number): void {
+    if (!this.inputReady) return;
+    const payload = this.inputEncoder.encodeMouseButtonDown({
+      button,
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    });
+    this.sendReliable(payload);
+  }
+
+  /**
+   * Send a mouse button up event (1=left, 2=middle, 3=right).
+   */
+  public sendMouseButtonUp(button: number): void {
+    if (!this.inputReady) return;
+    const payload = this.inputEncoder.encodeMouseButtonUp({
+      button,
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    });
+    this.sendReliable(payload);
+  }
+
+  /**
+   * Send a mouse wheel event (used by two-finger scroll).
+   * delta is an integer, positive = scroll up.
+   */
+  public sendMouseWheel(delta: number): void {
+    if (!this.inputReady) return;
+    const payload = this.inputEncoder.encodeMouseWheel({
+      delta: Math.max(-32768, Math.min(32767, delta)),
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    });
+    this.sendReliable(payload);
+  }
+
+  /**
+   * Set a single XInput gamepad button pressed or released.
+   * Used by the on-screen virtual gamepad for Android.
+   * xinputFlag is one of the GAMEPAD_* constants from inputProtocol.ts.
+   */
+  public sendGamepadButton(xinputFlag: number, pressed: boolean): void {
+    if (!this.inputReady) return;
+    // Build a GamepadInput object that only changes the requested button.
+    // We'll merge with the previous state of controller 0 if available.
+    const prev = this.previousGamepadStates.get(0);
+    const newButtons = pressed
+      ? ((prev?.buttons ?? 0) | xinputFlag)
+      : ((prev?.buttons ?? 0) & ~xinputFlag);
+
+    const state = {
+      controllerId: 0,
+      buttons: newButtons,
+      leftTrigger:  prev?.leftTrigger  ?? 0,
+      rightTrigger: prev?.rightTrigger ?? 0,
+      leftStickX:   prev?.leftStickX   ?? 0,
+      leftStickY:   prev?.leftStickY   ?? 0,
+      rightStickX:  prev?.rightStickX  ?? 0,
+      rightStickY:  prev?.rightStickY  ?? 0,
+      connected: true,
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    };
+
+    this.previousGamepadStates.set(0, state);
+    const usePR = this.mouseInputChannel?.readyState === "open";
+    const bytes = this.inputEncoder.encodeGamepadState(state, this.gamepadBitmap | 1, usePR);
+    this.sendGamepad(bytes);
+  }
+
+  /**
+   * Set an analog stick value for on-screen thumbstick controls.
+   * x and y are normalised floats in [-1, 1].
+   */
+  public sendGamepadStick(side: "left" | "right", x: number, y: number): void {
+    if (!this.inputReady) return;
+    const prev = this.previousGamepadStates.get(0);
+    const clamp16 = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v * 32767)));
+
+    const state = {
+      controllerId: 0,
+      buttons:      prev?.buttons      ?? 0,
+      leftTrigger:  prev?.leftTrigger  ?? 0,
+      rightTrigger: prev?.rightTrigger ?? 0,
+      leftStickX:   side === "left"  ? clamp16(x) : (prev?.leftStickX  ?? 0),
+      leftStickY:   side === "left"  ? clamp16(-y) : (prev?.leftStickY ?? 0),
+      rightStickX:  side === "right" ? clamp16(x) : (prev?.rightStickX ?? 0),
+      rightStickY:  side === "right" ? clamp16(-y) : (prev?.rightStickY ?? 0),
+      connected: true,
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    };
+
+    this.previousGamepadStates.set(0, state);
+    const usePR = this.mouseInputChannel?.readyState === "open";
+    const bytes = this.inputEncoder.encodeGamepadState(state, this.gamepadBitmap | 1, usePR);
+    this.sendGamepad(bytes);
+  }
+
   /**
    * Enumerate available microphone devices
    */
