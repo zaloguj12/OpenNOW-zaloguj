@@ -17,12 +17,21 @@ and WebSocket signaling.
 
 ---
 
-## Step 1 -- Install Capacitor
+## Important: all commands run inside opennow-stable/
 
-Run these commands inside opennow-stable/:
+The repo root has its own package.json that is unrelated to the Android build.
+Every command in this guide must be run from inside the opennow-stable/ subfolder.
+Do this first and keep that terminal open for all steps:
 
 ```powershell
-cd opennow-stable
+cd D:\Projects\gfnclient\opennow\opennow-stable
+```
+
+---
+
+## Step 1 -- Install Capacitor
+
+```powershell
 npm install @capacitor/core @capacitor/android @capacitor/splash-screen
 ```
 

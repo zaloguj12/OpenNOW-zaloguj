@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { getPlatformApi } from "./platform/index";
-import { isAndroid } from "./platform/detect";
+import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
 import { TouchGamepad } from "./components/TouchGamepad";
 import { TouchInputHandler } from "./gfn/touchInput";
 
@@ -431,17 +431,55 @@ export function App(): JSX.Element {
 
     const initialize = async () => {
       try {
-        // Load settings first
+        // Step 1: detect platform
+        const { getPlatform } = await import("./platform/detect");
+        const plat = getPlatform();
+        setStartupStatusMessage(`Platform: ${plat} | Capacitor: ${!!(window as any).Capacitor}`);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Step 2: wait for Capacitor bridge if needed
+        if ((window as any).Capacitor) {
+          setStartupStatusMessage("Waiting for Capacitor bridge...");
+          await new Promise<void>((resolve) => {
+            if ((window as any).Capacitor?.isNativePlatform?.()) {
+              resolve();
+            } else {
+              document.addEventListener("deviceready", () => resolve(), { once: true });
+              setTimeout(resolve, 1000);
+            }
+          });
+        }
+
+        // Step 3: load settings
+        setStartupStatusMessage("Step 3: loading settings...");
         const loadedSettings = await getPlatformApi().getSettings();
         setSettings(loadedSettings);
         setSettingsLoaded(true);
+        setStartupStatusMessage("Step 3: settings OK");
+        await new Promise(r => setTimeout(r, 300));
 
-        // Load providers and session (force refresh on startup restore)
-        setStartupStatusMessage("Restoring saved session and refreshing token...");
-        const [providerList, sessionResult] = await Promise.all([
-          getPlatformApi().getLoginProviders(),
-          getPlatformApi().getAuthSession({ forceRefresh: true }),
-        ]);
+        // Step 4: load providers
+        setStartupStatusMessage("Step 4: calling getLoginProviders...");
+        let providerList: any[] = [];
+        try {
+          const providerResult = await Promise.race([
+            getPlatformApi().getLoginProviders(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("providers timeout")), 5000))
+          ]);
+          providerList = Array.isArray(providerResult) ? providerResult : [];
+          setStartupStatusMessage(`Step 4: got ${providerList.length} providers`);
+        } catch (e) {
+          setStartupStatusMessage(`Step 4: failed (${e}) -- using default`);
+          providerList = [{ idpId: "PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg", code: "NVIDIA", displayName: "NVIDIA", streamingServiceUrl: "https://prod.cloudmatchbeta.nvidiagrid.net/", priority: 0 }];
+        }
+        await new Promise(r => setTimeout(r, 600));
+
+        // Step 5: restore session
+        setStartupStatusMessage("Step 5: restoring session...");
+        const sessionResult = await getPlatformApi().getAuthSession({ forceRefresh: false });
+        setStartupStatusMessage(`Step 5: session=${sessionResult.session ? "found" : "none"} outcome=${sessionResult.refresh.outcome}`);
+        await new Promise(r => setTimeout(r, 300));
+
         const persistedSession = sessionResult.session;
 
         if (sessionResult.refresh.outcome === "refreshed") {
@@ -552,7 +590,7 @@ export function App(): JSX.Element {
 
   const requestEscLockedPointerCapture = useCallback(async (target: HTMLVideoElement) => {
     // Touch screens don't use pointer lock -- skip entirely on Android.
-    if (isAndroid) return;
+    if (isAndroid()) return;
 
     if (!document.fullscreenElement) {
       await document.documentElement.requestFullscreen().catch(() => {});
@@ -734,7 +772,7 @@ export function App(): JSX.Element {
             setSessionStartedAtMs((current) => current ?? Date.now());
 
             // On Android, set up touch-to-mouse translation on the video element.
-            if (isAndroid && videoRef.current && clientRef.current) {
+            if (isAndroid() && videoRef.current && clientRef.current) {
               touchHandlerRef.current?.dispose();
               touchHandlerRef.current = new TouchInputHandler(videoRef.current, clientRef.current);
             }
@@ -1229,7 +1267,7 @@ export function App(): JSX.Element {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Android doesn't have a physical keyboard -- skip all shortcut handling.
-      if (isAndroid) return;
+      if (isAndroid()) return;
 
       const target = e.target as HTMLElement | null;
       const isTyping = !!target && (
@@ -1473,7 +1511,7 @@ export function App(): JSX.Element {
         {/* On-screen gamepad -- only shown on Android while the stream is running */}
         <TouchGamepad
           clientRef={clientRef}
-          visible={isAndroid && streamStatus === "streaming"}
+          visible={isAndroid() && streamStatus === "streaming"}
         />
 
         {streamStatus !== "streaming" && (

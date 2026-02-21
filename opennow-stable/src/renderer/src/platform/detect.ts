@@ -1,33 +1,37 @@
-/**
- * Platform detection helpers.
- *
- * We run in one of two environments:
- *   - Electron: the normal desktop app, with window.openNow exposed by the preload script
- *   - Capacitor: the Android/iOS build, where native APIs go through Capacitor plugins
- *
- * Everything in the app should import from here instead of touching
- * window.openNow or Capacitor directly.
- */
-
 export type Platform = "electron" | "capacitor" | "web";
 
 function detectPlatform(): Platform {
-  // Capacitor injects window.Capacitor when running inside a native app
-  if (typeof window !== "undefined" && (window as any).Capacitor) {
+  if (typeof window === "undefined") return "web";
+
+  // Capacitor injects window.Capacitor when running inside a native app.
+  // Check both the object and the isNativePlatform flag to be sure.
+  const cap = (window as any).Capacitor;
+  if (cap && (cap.isNativePlatform?.() || cap.isPluginAvailable || cap.platform === "android" || cap.platform === "ios")) {
     return "capacitor";
   }
 
   // Electron injects window.openNow via the preload context bridge
-  if (typeof window !== "undefined" && (window as any).openNow) {
+  if ((window as any).openNow) {
     return "electron";
   }
 
-  // Plain browser / development server fallback
   return "web";
 }
 
+// Evaluated lazily so Capacitor's bridge has time to inject window.Capacitor
+// before we check. Call getPlatform() instead of using PLATFORM directly
+// in code that runs after module init.
+let _platform: Platform | null = null;
+export function getPlatform(): Platform {
+  if (_platform) return _platform;
+  _platform = detectPlatform();
+  return _platform;
+}
+
+// Static export kept for backwards compat -- evaluated once at import time.
+// On Android this may be wrong if Capacitor hasn't injected yet; prefer getPlatform().
 export const PLATFORM: Platform = detectPlatform();
 
-export const isElectron = PLATFORM === "electron";
-export const isAndroid = PLATFORM === "capacitor";
-export const isWeb = PLATFORM === "web";
+export const isElectron = () => getPlatform() === "electron";
+export const isAndroid = () => getPlatform() === "capacitor";
+export const isWeb = () => getPlatform() === "web";

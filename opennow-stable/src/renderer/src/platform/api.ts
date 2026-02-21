@@ -13,8 +13,39 @@
  * up separately via `npx cap add android` after the npm install.
  */
 
-import { PLATFORM } from "./detect";
+import { getPlatform } from "./detect";
 import type { OpenNowApi } from "@shared/gfn";
+
+// Call a Capacitor native plugin method directly via the low-level bridge.
+// This bypasses registerPlugin() which behaves inconsistently across Capacitor versions.
+function callCapacitor(plugin: string, method: string, args: object = {}): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const cap = (window as any).Capacitor;
+    if (!cap) {
+      reject(new Error("Capacitor bridge not available"));
+      return;
+    }
+    // Capacitor 6+ exposes nativePromise directly
+    if (cap.nativePromise) {
+      cap.nativePromise(plugin, method, args).then(resolve).catch(reject);
+      return;
+    }
+    // Fallback: Capacitor 4/5 style
+    if (cap.Plugins?.[plugin]?.[method]) {
+      cap.Plugins[plugin][method](args).then(resolve).catch(reject);
+      return;
+    }
+    reject(new Error(`Plugin ${plugin}.${method} not found on bridge`));
+  });
+}
+
+// Wraps a plugin call with a timeout so a hung Kotlin coroutine can't freeze the UI.
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 
 // --- Electron path ---
 
@@ -33,25 +64,7 @@ function getElectronApi(): OpenNowApi {
  * On Android the plugin is implemented in Kotlin inside the android/ folder.
  */
 async function callNativePlugin<T>(method: string, args?: Record<string, unknown>): Promise<T> {
-  // We import Capacitor lazily so it never crashes when running in Electron
-  // (the package simply won't be installed there).
-  let Plugins: any;
-  try {
-    const cap = await import("@capacitor/core");
-    Plugins = cap.Plugins;
-  } catch {
-    throw new Error(
-      `Capacitor core is not installed. ` +
-      `Run: npm install @capacitor/core @capacitor/android --save`,
-    );
-  }
-
-  const GfnPlugin = Plugins?.GfnPlugin;
-  if (!GfnPlugin) {
-    throw new Error("GfnPlugin is not registered. Make sure android/ is initialised and the plugin is listed in MainActivity.java.");
-  }
-
-  return GfnPlugin[method](args ?? {}) as Promise<T>;
+  return callCapacitor("GfnPlugin", method, args ?? {}) as Promise<T>;
 }
 
 /**
@@ -76,8 +89,9 @@ function buildCapacitorApi(): OpenNowApi {
   async function ensureSignalingEvents() {
     if (signalingListenerHandle) return;
     try {
-      const cap = await import("@capacitor/core");
-      signalingListenerHandle = await cap.Plugins.GfnPlugin.addListener(
+      const { registerPlugin } = await import("@capacitor/core");
+      const plugin = registerPlugin("GfnPlugin");
+      signalingListenerHandle = await (plugin as any).addListener(
         "signalingEvent",
         (event: any) => {
           for (const cb of signalingListeners) {
@@ -91,18 +105,31 @@ function buildCapacitorApi(): OpenNowApi {
   }
 
   return {
-    getAuthSession: (input?) => callNativePlugin("getAuthSession", input as any),
-    getLoginProviders: () => callNativePlugin("getLoginProviders"),
-    getRegions: (input?) => callNativePlugin("getRegions", input as any),
+    getAuthSession: (input?) =>
+      withTimeout(
+        callNativePlugin("getAuthSession", input as any),
+        8000,
+        { session: null, refresh: { attempted: false, forced: false, outcome: "not_attempted", message: "Plugin timeout" } }
+      ),
+    getLoginProviders: () =>
+      callNativePlugin<{ providers: any[] }>("getLoginProviders").then((r) => r.providers ?? []),
+    getRegions: (input?) =>
+      callNativePlugin<{ regions: any[] }>("getRegions", input as any).then((r) => r.regions ?? []),
 
     // On Android login opens a Chrome Custom Tab instead of Electron's shell.openExternal
     login: (input) => callNativePlugin("login", input as any),
     logout: () => callNativePlugin("logout"),
 
     fetchSubscription: (input) => callNativePlugin("fetchSubscription", input as any),
-    fetchMainGames: (input) => callNativePlugin("fetchMainGames", input as any),
-    fetchLibraryGames: (input) => callNativePlugin("fetchLibraryGames", input as any),
-    fetchPublicGames: () => callNativePlugin("fetchPublicGames"),
+    fetchMainGames: (input) =>
+      callNativePlugin<{ games: any }>("fetchMainGames", input as any).then((r) =>
+        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
+    fetchLibraryGames: (input) =>
+      callNativePlugin<{ games: any }>("fetchLibraryGames", input as any).then((r) =>
+        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
+    fetchPublicGames: () =>
+      callNativePlugin<{ games: any }>("fetchPublicGames").then((r) =>
+        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
     resolveLaunchAppId: (input) => callNativePlugin("resolveLaunchAppId", input as any),
 
     createSession: (input) => callNativePlugin("createSession", input as any),
@@ -133,7 +160,23 @@ function buildCapacitorApi(): OpenNowApi {
     toggleFullscreen: () => callNativePlugin("toggleFullscreen"),
     togglePointerLock: () => Promise.resolve(), // no pointer lock on touch screens
 
-    getSettings: () => callNativePlugin("getSettings"),
+    getSettings: () =>
+      withTimeout(
+        callNativePlugin("getSettings"),
+        8000,
+        // Default settings returned if the plugin hangs
+        {
+          resolution: "1920x1080", fps: 60, maxBitrateMbps: 75, codec: "H264",
+          decoderPreference: "auto", encoderPreference: "auto", colorQuality: "10bit_420",
+          region: "", clipboardPaste: false, mouseSensitivity: 1,
+          shortcutToggleStats: "F3", shortcutTogglePointerLock: "F8",
+          shortcutStopStream: "Ctrl+Shift+Q", shortcutToggleAntiAfk: "Ctrl+Shift+K",
+          shortcutToggleMicrophone: "Ctrl+Shift+M", microphoneMode: "disabled",
+          microphoneDeviceId: "", hideStreamButtons: false,
+          sessionClockShowEveryMinutes: 60, sessionClockShowDurationSeconds: 30,
+          windowWidth: 1400, windowHeight: 900,
+        } as any
+      ),
     setSetting: (key, value) => callNativePlugin("setSetting", { key, value }),
     resetSettings: () => callNativePlugin("resetSettings"),
   };
@@ -151,9 +194,10 @@ let _api: OpenNowApi | null = null;
 export function getPlatformApi(): OpenNowApi {
   if (_api) return _api;
 
-  if (PLATFORM === "electron") {
+  const platform = getPlatform();
+  if (platform === "electron") {
     _api = getElectronApi();
-  } else if (PLATFORM === "capacitor") {
+  } else if (platform === "capacitor") {
     _api = buildCapacitorApi();
   } else {
     // Plain web / dev server -- forward to Electron API if accidentally present,
