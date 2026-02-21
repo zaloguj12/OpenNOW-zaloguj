@@ -819,40 +819,38 @@ export function App(): JSX.Element {
     setIsLoggingIn(true);
     setLoginError(null);
     try {
-      const session = await getPlatformApi().login({ providerIdpId: providerIdpId || undefined });
+      const session = await getPlatformApi().login({ providerIdpId: providerIdpId || undefined }) as any;
+      // Login resolved -- stop spinner immediately so user can see the app
       setAuthSession(session);
-      setProviderIdpId(session.provider.idpId);
+      if (session?.provider?.idpId) setProviderIdpId(session.provider.idpId);
+      setIsLoggingIn(false);
 
-      // Load regions
+      // Load the rest in the background -- don't block the UI
       const token = session.tokens.idToken ?? session.tokens.accessToken;
-      const discovered = await getPlatformApi().getRegions({ token });
-      setRegions(discovered);
 
-      try {
-        await loadSubscriptionInfo(session);
-      } catch (error) {
-        console.warn("Failed to load subscription info:", error);
-        setSubscriptionInfo(null);
-      }
+      getPlatformApi().getRegions({ token }).then(setRegions).catch(() => {});
+      loadSubscriptionInfo(session).catch(() => setSubscriptionInfo(null));
 
-      // Load games
-      const mainGames = await getPlatformApi().fetchMainGames({
+      getPlatformApi().fetchMainGames({
         token,
         providerStreamingBaseUrl: session.provider.streamingServiceUrl,
+      }).then((mainGames) => {
+        setGames(mainGames);
+        setSource("main");
+        setSelectedGameId(mainGames[0]?.id ?? "");
+      }).catch((e: any) => {
+        // Fall back to public games but show the error briefly
+        setLoginError("games: " + (e?.message ?? String(e)));
+        setTimeout(() => setLoginError(null), 8000);
+        getPlatformApi().fetchPublicGames().then((g) => { setGames(g); setSource("public"); }).catch(() => {});
       });
-      setGames(mainGames);
-      setSource("main");
-      setSelectedGameId(mainGames[0]?.id ?? "");
 
-      // Load library
-      const libGames = await getPlatformApi().fetchLibraryGames({
+      getPlatformApi().fetchLibraryGames({
         token,
         providerStreamingBaseUrl: session.provider.streamingServiceUrl,
-      });
-      setLibraryGames(libGames);
+      }).then(setLibraryGames).catch(() => {});
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Login failed");
-    } finally {
       setIsLoggingIn(false);
     }
   }, [loadSubscriptionInfo, providerIdpId]);

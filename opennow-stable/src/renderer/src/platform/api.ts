@@ -116,7 +116,6 @@ function buildCapacitorApi(): OpenNowApi {
     getRegions: (input?) =>
       callNativePlugin<{ regions: any[] }>("getRegions", input as any).then((r) => r.regions ?? []),
 
-    // On Android login opens a Chrome Custom Tab instead of Electron's shell.openExternal
     login: (input) => callNativePlugin("login", input as any),
     logout: () => callNativePlugin("logout"),
 
