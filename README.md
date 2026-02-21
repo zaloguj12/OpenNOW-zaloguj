@@ -1,3 +1,5 @@
+# DO NOT USE THIS YET, IT IS NOT FULLY OPERATIONAL
+
 # Android Build Guide
 
 This explains how to build OpenNOW for Android. The Android build uses
