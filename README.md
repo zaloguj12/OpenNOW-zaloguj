@@ -1,220 +1,285 @@
-# DO NOT USE THIS YET, IT IS NOT FULLY OPERATIONAL
+# OpenNOW
 
-# Android Build Guide
-
-This explains how to build OpenNOW for Android. The Android build uses
-Capacitor to wrap the existing React renderer inside a native Android WebView.
-The native Kotlin plugin (android-plugin/GfnPlugin.kt) handles the parts that
-cannot run in a browser: auth token storage, HTTP requests to NVIDIA's backend,
-and WebSocket signaling.
+Unofficial GeForce NOW client. Supports Windows, macOS, Linux (via Electron) and Android (via Capacitor).
 
 ---
 
-## What you need
+## Architecture Overview
 
-- Node.js 20+
-- Android Studio (Electric Eel or newer)
-- JDK 17
-- Android SDK with API level 33 or higher
+The project is a single codebase that compiles to two targets:
 
----
+- **Electron** — desktop app for Windows, macOS, Linux. The main process handles
+  signaling (WebSocket via the `ws` package). The renderer handles WebRTC, games API,
+  session management, and all UI.
 
-## Important: all commands run inside opennow-stable/
+- **Android (Capacitor)** — the same Vite/React renderer is bundled into a WebView.
+  Session management, games API, and signaling all run directly in the WebView using
+  browser-native `fetch` and `WebSocket`. A Kotlin Capacitor plugin (`GfnPlugin.kt`)
+  handles auth (OAuth PKCE via a WebView activity) and settings storage only.
 
-The repo root has its own package.json that is unrelated to the Android build.
-Every command in this guide must be run from inside the opennow-stable/ subfolder.
-Do this first and keep that terminal open for all steps:
-
-```powershell
-cd D:\Projects\gfnclient\opennow\opennow-stable
+```
+src/
+  main/          Electron main process (signaling, window management)
+  preload/       Electron preload script (window.openNow bridge)
+  renderer/      React UI + WebRTC client (shared between Electron and Android)
+    platform/    Platform abstraction layer
+      api.ts     Electron vs Android API routing
+      browserSignaling.ts   Android WebSocket signaling (browser-native)
+      cryptoShim.ts         node:crypto shim for browser builds
+  shared/        TypeScript types shared across main/renderer
+android/         Capacitor Android project (Gradle)
+  app/src/main/java/com/zortos/opennow/
+    GfnPlugin.kt            Capacitor plugin (auth, settings)
+    AndroidSignalingManager.kt  (legacy, no longer used by renderer)
+    LoginActivity.kt        WebView-based OAuth login
 ```
 
 ---
 
-## Step 1 -- Install Capacitor
+## Prerequisites
+
+### All platforms
+
+- **Node.js** 18 or newer
+- **npm** 9 or newer
 
 ```powershell
-npm install @capacitor/core @capacitor/android @capacitor/splash-screen
+node --version   # must be >= 18
+npm --version    # must be >= 9
+```
+
+### Electron (desktop builds only)
+
+No extra tools needed beyond Node.js. Electron is installed as a dev dependency.
+
+### Android
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Android Studio | Hedgehog or newer | Installs SDK + build tools |
+| Android SDK | API 36 (compile), API 24 (min) | Via SDK Manager in Android Studio |
+| JDK | 17 | Bundled with Android Studio, or install separately |
+| Kotlin | 1.9+ | Bundled with Android Studio |
+| ADB | any | Part of Android SDK platform-tools |
+
+After installing Android Studio, open it once and let it finish downloading the SDK.
+Then add platform-tools to your PATH so `adb` works from a terminal:
+
+```powershell
+# Windows -- add to your PowerShell profile or system environment variables
+$env:PATH += ";$env:LOCALAPPDATA\Android\Sdk\platform-tools"
 ```
 
 ---
 
-## Step 2 -- Build the web app
+## Install dependencies
+
+```powershell
+cd opennow-stable
+npm install
+```
+
+---
+
+## Electron (Desktop)
+
+### Development (hot reload)
+
+```powershell
+npm run dev
+```
+
+### Build renderer + main (no installer)
 
 ```powershell
 npm run build
 ```
 
-This writes the compiled renderer to dist/. Capacitor copies this folder
-into the Android project so the WebView loads it without a network request.
+Output goes to `dist/` (renderer) and `dist-electron/` (main process).
 
----
-
-## Step 3 -- Add the Android platform
+### Package into installer
 
 ```powershell
-npx cap add android
+npm run dist
 ```
 
-This creates the android/ folder with the Gradle project, MainActivity,
-and the WebView configuration.
-
----
-
-## Step 4 -- Copy the Kotlin plugin files
-
-Copy both files from android-plugin/ into your Android source tree:
+Unsigned build -- skips code signing. Output in `dist-release/`.
 
 ```powershell
-$dest = "android\app\src\main\java\com\zortos\opennow"
-New-Item -ItemType Directory -Force -Path $dest
-Copy-Item android-plugin\GfnPlugin.kt $dest\
-Copy-Item android-plugin\AndroidSignalingManager.kt $dest\
+npm run dist:signed
+```
+
+Signed build -- requires code signing certificates configured in the environment.
+
+### Packaging targets
+
+| Platform | Formats | Artifact name |
+|----------|---------|---------------|
+| Windows | NSIS installer + portable exe | `OpenNOW-vX.Y.Z-setup-x64.exe` |
+| macOS | dmg + zip (x64 and arm64) | `OpenNOW-vX.Y.Z-mac-x64.dmg` |
+| Linux x64 | AppImage + deb | `OpenNOW-vX.Y.Z-linux-x64.AppImage` |
+| Linux arm64 | AppImage + deb | `OpenNOW-vX.Y.Z-linux-arm64.AppImage` |
+
+### Type checking
+
+```powershell
+npm run typecheck
 ```
 
 ---
 
-## Step 5 -- Register the plugin and OAuth redirect in MainActivity
+## Android (Capacitor)
 
-Open android/app/src/main/java/com/zortos/opennow/MainActivity.kt
-and replace its contents with this:
+### One-time setup
 
-```kotlin
-package com.zortos.opennow
+Make sure you have done `npm install` first (see above).
+The `android/` folder is the Gradle project checked in to the repo.
+You do not need to run `cap init` or `cap add android` again.
 
-import android.content.Intent
-import android.os.Bundle
-import com.getcapacitor.BridgeActivity
+### Full build and install workflow
 
-class MainActivity : BridgeActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        registerPlugin(GfnPlugin::class.java)
-        super.onCreate(savedInstanceState)
-    }
+**Step 1 -- Build the web bundle:**
 
-    // Receive the opennow://auth?code=... redirect from the system browser
-    // after the user logs in. Hands the URI to GfnPlugin to complete the
-    // OAuth PKCE token exchange.
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        val uri = intent.data ?: return
-        if (uri.scheme == "opennow" && uri.host == "auth") {
-            val plugin = bridge.getPlugin("GfnPlugin")?.getInstance() as? GfnPlugin
-            plugin?.handleOAuthRedirect(uri)
-        }
-    }
-}
+```powershell
+npm run build
 ```
 
----
-
-## Step 6 -- Add Gradle dependencies
-
-Open android/app/build.gradle and add to the dependencies block:
-
-```groovy
-implementation "com.squareup.okhttp3:okhttp:4.12.0"
-implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0"
-implementation "androidx.security:security-crypto:1.1.0-alpha06"
-```
-
----
-
-## Step 7 -- Add the OAuth redirect intent filter
-
-Open android/app/src/main/AndroidManifest.xml and add this inside the
-<activity> tag so the app catches the opennow://auth redirect after login:
-
-```xml
-<intent-filter android:autoVerify="false">
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="opennow" android:host="auth" />
-</intent-filter>
-```
-
----
-
-## Step 8 -- Sync and open in Android Studio
+**Step 2 -- Sync web assets into the Android project:**
 
 ```powershell
 npx cap sync android
-npx cap open android
 ```
 
-Then press Run in Android Studio to build and install the APK on a device
-or emulator. To build from the command line instead:
+This copies `dist/` into `android/app/src/main/assets/public/` and updates
+Capacitor plugins. Run this every time after `npm run build`.
+
+**Step 3 -- Build the APK:**
 
 ```powershell
 cd android
 .\gradlew assembleDebug
 ```
 
-The APK will be at android\app\build\outputs\apk\debug\app-debug.apk.
+Debug APK output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
----
+For a release build (requires signing config):
 
-## Feature status
-
-| Feature               | Status   | Notes                                                       |
-|-----------------------|----------|-------------------------------------------------------------|
-| UI / game library     | Done     | Full React renderer runs in the WebView                     |
-| WebRTC streaming      | Done     | WebView handles WebRTC natively via Chromium                |
-| Settings              | Done     | Stored in Android SharedPreferences                         |
-| Signaling (WebSocket) | Done     | AndroidSignalingManager.kt handles the WS connection        |
-| Login (OAuth PKCE)    | Done     | Browser opens, redirect caught by onNewIntent, tokens saved |
-| Token refresh         | Done     | Refreshed on startup, stored in EncryptedSharedPreferences  |
-| Touch input           | Done     | TouchInputHandler maps touch to GFN mouse protocol          |
-| Virtual gamepad       | Done     | TouchGamepad.tsx overlaid during streaming on Android       |
-| Session management    | Partial  | create/poll/stop done; claimSession stub only               |
-| Subscription info     | Pending  | Requires fetchSubscription Kotlin impl                      |
-
----
-
-## How login works end to end
-
-1. The renderer calls getPlatformApi().login(). On Android this calls
-   GfnPlugin.login() via Capacitor.
-
-2. GfnPlugin generates a PKCE verifier + challenge, stores the pending
-   PluginCall reference, and opens the NVIDIA login page in the system
-   browser via Intent.ACTION_VIEW.
-
-3. The user logs in. NVIDIA redirects the browser to opennow://auth?code=...
-
-4. Android routes the opennow:// URI back to MainActivity.onNewIntent().
-
-5. MainActivity calls plugin.handleOAuthRedirect(uri).
-
-6. GfnPlugin exchanges the code for tokens (PKCE token exchange against
-   https://login.nvidia.com/token), saves them in EncryptedSharedPreferences,
-   and resolves the original Capacitor PluginCall with the session object.
-
-7. The renderer receives the AuthSession and proceeds to load the game list.
-
----
-
-## Project structure after Android is added
-
+```powershell
+.\gradlew assembleRelease
 ```
-opennow-stable/
-  android/                   <- generated by npx cap add android
-    app/src/main/java/
-      com/zortos/opennow/
-        MainActivity.kt      <- register plugin + onNewIntent wiring
-        GfnPlugin.kt         <- copied from android-plugin/
-        AndroidSignalingManager.kt
-  android-plugin/            <- source of truth for Kotlin files
-    GfnPlugin.kt
-    AndroidSignalingManager.kt
-  capacitor.config.json      <- Capacitor configuration
-  src/renderer/src/platform/
-    detect.ts                <- Electron vs Capacitor vs web detection
-    api.ts                   <- unified API bridge for both platforms
-    index.ts                 <- re-exports
-  src/renderer/src/gfn/
-    touchInput.ts            <- touch-to-mouse translation for Android
-  src/renderer/src/components/
-    TouchGamepad.tsx         <- on-screen virtual gamepad for Android
+
+**Step 4 -- Install on device:**
+
+```powershell
+# Make sure your device is connected with USB debugging enabled
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices
+
+# Uninstall old version first (avoids signature mismatch errors)
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" uninstall com.zortos.opennow
+
+# Install the new APK
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install app\build\outputs\apk\debug\app-debug.apk
 ```
+
+### Quick rebuild (after code changes)
+
+```powershell
+cd opennow-stable
+npm run build
+npx cap sync android
+cd android
+.\gradlew assembleDebug
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" uninstall com.zortos.opennow
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install app\build\outputs\apk\debug\app-debug.apk
+```
+
+### Open in Android Studio
+
+```powershell
+npx cap open android
+```
+
+Or open the `android/` folder directly in Android Studio.
+
+### Logcat (debug output from device)
+
+```powershell
+# All app output
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat | Select-String "Capacitor|chromium|WebRTC|GfnPlugin"
+
+# Last 200 lines then exit
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" logcat -d | Select-String "Capacitor|Console|error" | Select-Object -Last 200
+```
+
+### Android requirements summary
+
+- `minSdkVersion` 24 (Android 7.0 Nougat)
+- `targetSdkVersion` / `compileSdkVersion` 36
+- App ID: `com.zortos.opennow`
+
+---
+
+## How the Android platform layer works
+
+The renderer (`src/renderer/src/platform/api.ts`) detects at runtime whether it
+is running in Electron or Capacitor and returns the appropriate API implementation.
+
+On Android:
+
+- **Auth** -- calls `GfnPlugin.kt` via Capacitor bridge. Opens a WebView activity
+  (`LoginActivity.kt`) for the NVIDIA OAuth PKCE flow. Tokens are stored in
+  `EncryptedSharedPreferences`.
+
+- **Games API** -- imported directly from `src/main/gfn/games.ts` into the renderer
+  bundle. Uses browser-native `fetch`. No Kotlin involved.
+
+- **Session management** -- imported directly from `src/main/gfn/cloudmatch.ts`
+  into the renderer bundle. Uses browser-native `fetch`. No Kotlin involved.
+
+- **Signaling** -- `BrowserSignalingClient` (`src/renderer/src/platform/browserSignaling.ts`)
+  opens a WebSocket directly in the WebView. No Kotlin involved.
+
+- **WebRTC** -- handled entirely by the browser's built-in WebRTC stack inside the
+  WebView. `GfnWebRtcClient` in `src/renderer/src/gfn/webrtcClient.ts` handles
+  offer/answer, ICE, and media track setup.
+
+- **Settings** -- calls `GfnPlugin.kt` via Capacitor bridge. Stored in
+  `SharedPreferences`.
+
+---
+
+## CI/CD
+
+Workflow: `.github/workflows/auto-build.yml`
+
+- Triggers on pushes to `dev`/`main` and pull requests
+- Builds: Windows, macOS (x64/arm64), Linux x64, Linux arm64
+- Artifacts uploaded to GitHub Releases
+
+### Tagged releases
+
+```powershell
+git tag opennow-stable-v0.2.4
+git push origin opennow-stable-v0.2.4
+```
+
+Format: `opennow-stable-vX.Y.Z`. The workflow automatically builds all platforms
+and creates or updates the GitHub Release.
+
+---
+
+## Project dependencies (key packages)
+
+| Package | Used for |
+|---------|---------|
+| `electron` | Desktop app host |
+| `electron-vite` | Build system (Vite + Electron integration) |
+| `electron-builder` | Packaging and installers |
+| `@capacitor/core` | Android WebView bridge |
+| `@capacitor/android` | Android Gradle plugin |
+| `@capacitor/cli` | `npx cap` commands |
+| `ws` | WebSocket in Electron main process (signaling) |
+| `react` / `react-dom` | UI framework |
+| `lucide-react` | Icons |
+| `typescript` | Type checking |
+| `vite` | Renderer bundler |
