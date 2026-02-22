@@ -31,6 +31,7 @@ import {
   rewriteH265TierFlag,
 } from "./sdp";
 import { MicrophoneManager, type MicState, type MicStateChange } from "./microphoneManager";
+import { getPlatformApi } from "../platform/index";
 
 interface OfferSettings {
   codec: VideoCodec;
@@ -2488,7 +2489,8 @@ export class GfnWebRtcClient {
         sdpMLineIndex: payload.sdpMLineIndex,
         usernameFragment: payload.usernameFragment,
       };
-      window.openNow.sendIceCandidate(candidate).catch((error) => {
+      const sendFn = (window as any).openNow?.sendIceCandidate ?? getPlatformApi().sendIceCandidate.bind(getPlatformApi());
+      sendFn(candidate).catch((error: unknown) => {
         this.log(`Failed to send local ICE candidate: ${String(error)}`);
       });
     };
@@ -2706,10 +2708,8 @@ export class GfnWebRtcClient {
       credentials,
     });
 
-    await window.openNow.sendAnswer({
-      sdp: finalSdp,
-      nvstSdp,
-    });
+    const sendAnswerFn = (window as any).openNow?.sendAnswer ?? getPlatformApi().sendAnswer.bind(getPlatformApi());
+    await sendAnswerFn({ sdp: finalSdp, nvstSdp });
     this.log("Sent SDP answer and nvstSdp");
 
     // 5. Inject manual ICE candidate from mediaConnectionInfo AFTER answer is sent
@@ -2769,6 +2769,10 @@ export class GfnWebRtcClient {
     }
 
     await this.pc.addIceCandidate(init);
+  }
+
+  isStreaming(): boolean {
+    return this.pc !== null && (this.pc.connectionState === "connected" || this.pc.connectionState === "connecting");
   }
 
   dispose(): void {

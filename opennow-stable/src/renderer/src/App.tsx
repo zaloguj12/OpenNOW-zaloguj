@@ -781,6 +781,13 @@ export function App(): JSX.Element {
           await clientRef.current?.addRemoteCandidate(event.candidate);
         } else if (event.type === "disconnected") {
           console.warn("Signaling disconnected:", event.reason);
+          // On Android/WebView, the GFN server closes the signaling WebSocket
+          // after the offer/answer exchange completes -- this is normal and does
+          // NOT mean the stream ended. Only tear down if we are not yet streaming.
+          if (clientRef.current?.isStreaming?.()) {
+            console.warn("[App] Signaling closed after stream established -- ignoring (WebRTC media still active)");
+            return;
+          }
           touchHandlerRef.current?.dispose();
           touchHandlerRef.current = null;
           clientRef.current?.dispose();

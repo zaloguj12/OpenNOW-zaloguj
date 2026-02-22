@@ -15,6 +15,9 @@
 
 import { getPlatform } from "./detect";
 import type { OpenNowApi } from "@shared/gfn";
+import { createSession, pollSession, stopSession, getActiveSessions, claimSession } from "@main/gfn/cloudmatch";
+import { fetchMainGames, fetchLibraryGames, fetchPublicGames as fetchPublicGamesElectron, resolveLaunchAppId } from "@main/gfn/games";
+import { BrowserSignalingClient } from "./browserSignaling";
 
 // Call a Capacitor native plugin method directly via the low-level bridge.
 // This bypasses registerPlugin() which behaves inconsistently across Capacitor versions.
@@ -78,31 +81,11 @@ async function callNativePlugin<T>(method: string, args?: Record<string, unknown
  * auth tokens, session data, and signaling messages the same way Electron does.
  */
 function buildCapacitorApi(): OpenNowApi {
-  // Event listeners are handled differently on Capacitor (addListener vs ipcRenderer.on)
-  // We store them in a plain Map so the renderer's unsubscribe callbacks still work.
+  // Browser-native signaling client (WebSocket running in the WebView).
+  // This replaces the Kotlin AndroidSignalingManager + Capacitor event bridge.
+  let browserSignaling: BrowserSignalingClient | null = null;
   const signalingListeners = new Set<Function>();
   const fullscreenListeners = new Set<Function>();
-
-  // Capacitor forwards server-push events as plugin events we can subscribe to.
-  let signalingListenerHandle: any = null;
-
-  async function ensureSignalingEvents() {
-    if (signalingListenerHandle) return;
-    try {
-      const { registerPlugin } = await import("@capacitor/core");
-      const plugin = registerPlugin("GfnPlugin");
-      signalingListenerHandle = await (plugin as any).addListener(
-        "signalingEvent",
-        (event: any) => {
-          for (const cb of signalingListeners) {
-            cb(event);
-          }
-        },
-      );
-    } catch {
-      // Plugin not available yet -- will be retried on next call
-    }
-  }
 
   return {
     getAuthSession: (input?) =>
@@ -119,34 +102,44 @@ function buildCapacitorApi(): OpenNowApi {
     login: (input) => callNativePlugin("login", input as any),
     logout: () => callNativePlugin("logout"),
 
-    fetchSubscription: (input) => callNativePlugin("fetchSubscription", input as any),
-    fetchMainGames: (input) =>
-      callNativePlugin<{ games: any }>("fetchMainGames", input as any).then((r) =>
-        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
-    fetchLibraryGames: (input) =>
-      callNativePlugin<{ games: any }>("fetchLibraryGames", input as any).then((r) =>
-        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
-    fetchPublicGames: () =>
-      callNativePlugin<{ games: any }>("fetchPublicGames").then((r) =>
-        typeof r.games === "string" ? JSON.parse(r.games) : r.games ?? []),
-    resolveLaunchAppId: (input) => callNativePlugin("resolveLaunchAppId", input as any),
+    fetchSubscription: () => Promise.resolve(null as any),
+    fetchMainGames: (input) => fetchMainGames((input as any).token, (input as any).providerStreamingBaseUrl),
+    fetchLibraryGames: (input) => fetchLibraryGames((input as any).token, (input as any).providerStreamingBaseUrl),
+    fetchPublicGames: () => fetchPublicGamesElectron(),
+    resolveLaunchAppId: (input) => resolveLaunchAppId((input as any).token, (input as any).appIdOrUuid, (input as any).providerStreamingBaseUrl),
 
-    createSession: (input) => callNativePlugin("createSession", input as any),
-    pollSession: (input) => callNativePlugin("pollSession", input as any),
-    stopSession: (input) => callNativePlugin("stopSession", input as any),
-    getActiveSessions: (token?, streamingBaseUrl?) =>
-      callNativePlugin("getActiveSessions", { token, streamingBaseUrl }),
-    claimSession: (input) => callNativePlugin("claimSession", input as any),
+    createSession: (input) => createSession(input as any),
+    pollSession: (input) => pollSession(input as any),
+    stopSession: (input) => stopSession(input as any),
+    getActiveSessions: (token?, streamingBaseUrl?) => getActiveSessions(token ?? "", streamingBaseUrl ?? ""),
+    claimSession: (input) => claimSession(input as any),
     showSessionConflictDialog: () => callNativePlugin("showSessionConflictDialog"),
 
-    connectSignaling: (input) => callNativePlugin("connectSignaling", input as any),
-    disconnectSignaling: () => callNativePlugin("disconnectSignaling"),
-    sendAnswer: (input) => callNativePlugin("sendAnswer", input as any),
-    sendIceCandidate: (input) => callNativePlugin("sendIceCandidate", input as any),
+    connectSignaling: async (input) => {
+      browserSignaling?.disconnect();
+      browserSignaling = new BrowserSignalingClient(
+        (input as any).signalingServer,
+        (input as any).sessionId,
+        (input as any).signalingUrl,
+      );
+      browserSignaling.onEvent((event) => {
+        for (const cb of signalingListeners) cb(event);
+      });
+      await browserSignaling.connect();
+    },
+    disconnectSignaling: async () => {
+      browserSignaling?.disconnect();
+      browserSignaling = null;
+    },
+    sendAnswer: async (input) => {
+      browserSignaling?.sendAnswer(input as any);
+    },
+    sendIceCandidate: async (input) => {
+      browserSignaling?.sendIceCandidate(input as any);
+    },
 
     onSignalingEvent: (listener) => {
       signalingListeners.add(listener);
-      void ensureSignalingEvents();
       return () => signalingListeners.delete(listener);
     },
 

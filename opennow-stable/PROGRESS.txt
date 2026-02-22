@@ -1,0 +1,51 @@
+PROGRESS LOG - OpenNOW Android
+Last updated: 2026-02-22
+
+== CURRENT STATUS ==
+Signaling now runs entirely in the WebView (BrowserSignalingClient).
+WebRTC offer/answer/ICE exchange wired through platform API on Android.
+Stream connects but was being kicked back to library due to signaling
+disconnect being misread as stream end.
+
+== FIXES THIS SESSION ==
+
+1. Created src/renderer/src/platform/browserSignaling.ts
+   - Pure browser WebSocket implementation of GFN signaling
+   - Replaces Kotlin AndroidSignalingManager + Capacitor event bridge
+   - Uses native WebSocket API available in Android WebView
+
+2. src/renderer/src/platform/api.ts
+   - connectSignaling: now creates BrowserSignalingClient in JS
+   - disconnectSignaling / sendAnswer / sendIceCandidate: direct JS calls
+   - Removed ensureSignalingEvents() and Capacitor plugin listener
+
+3. src/renderer/src/App.tsx
+   - disconnected handler: now checks clientRef.current.isStreaming()
+   - If stream is already established, ignores signaling disconnect
+   - GFN server closes signaling WebSocket after offer/answer -- this is normal
+
+4. src/renderer/src/gfn/webrtcClient.ts
+   - Added isStreaming() method: returns true if RTCPeerConnection is
+     connected or connecting
+   - Added import for getPlatformApi
+   - sendIceCandidate: uses window.openNow if available (Electron),
+     falls back to getPlatformApi().sendIceCandidate (Android)
+   - sendAnswer: same pattern -- window.openNow on Electron,
+     getPlatformApi().sendAnswer on Android
+
+== ROOT CAUSE OF LIBRARY REDIRECT ==
+GFN server closes signaling WebSocket after offer/answer exchange completes.
+This is expected behavior. App.tsx was treating ANY signaling disconnect as
+stream end, calling setStreamStatus("idle") which sent user back to library.
+Fix: only tear down stream state if WebRTC peer connection is not yet established.
+
+== BUILD & DEPLOY ==
+npm run build
+npx cap sync android
+cd android
+.\gradlew assembleDebug
+adb uninstall com.zortos.opennow
+adb install app\build\outputs\apk\debug\app-debug.apk
+
+== KNOWN REMAINING ISSUES ==
+- None confirmed. Test if game video/audio displays after connecting.
