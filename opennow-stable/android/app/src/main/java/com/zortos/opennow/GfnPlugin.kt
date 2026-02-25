@@ -376,20 +376,57 @@ class GfnPlugin : Plugin() {
 
     @PluginMethod
     fun getLoginProviders(call: PluginCall) {
-        // Return the hardcoded default provider immediately -- no network call.
-        // The pcs.geforcenow.com endpoint only returns regional variants of the
-        // same NVIDIA provider anyway, so this is equivalent for all users.
-        val providers = com.getcapacitor.JSArray()
-        val def = JSObject()
-        def.put("idpId", "PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg")
-        def.put("code", "NVIDIA")
-        def.put("displayName", "NVIDIA")
-        def.put("streamingServiceUrl", "https://prod.cloudmatchbeta.nvidiagrid.net/")
-        def.put("priority", 0)
-        providers.put(def)
-        val result = JSObject()
-        result.put("providers", providers)
-        call.resolve(result)
+        runAsync(call, block = {
+            try {
+                val url = "https://pcs.geforcenow.com/v1/serviceUrls"
+                val headers = mapOf(
+                    "User-Agent" to ANDROID_USER_AGENT,
+                    "Accept" to "application/json"
+                )
+                get(url, headers) as String?
+            } catch (e: Exception) {
+                // If the network call fails, fall back to the hardcoded default
+                android.util.Log.w("GfnPlugin", "getLoginProviders fetch failed: ${e.message}")
+                null
+            }
+        }, toJs = { body ->
+            val arr = com.getcapacitor.JSArray()
+            var parsed = false
+            if (body != null) {
+                try {
+                    val root = JSONObject(body)
+                    val endpoints = root
+                        .optJSONObject("gfnServiceInfo")
+                        ?.optJSONArray("gfnServiceEndpoints")
+                    if (endpoints != null) {
+                        for (i in 0 until endpoints.length()) {
+                            val ep = endpoints.getJSONObject(i)
+                            arr.put(JSObject().also {
+                                it.put("idpId", ep.optString("idpId"))
+                                it.put("code", ep.optString("loginProviderCode"))
+                                it.put("displayName", ep.optString("loginProviderDisplayName"))
+                                it.put("streamingServiceUrl", ep.optString("streamingServiceUrl"))
+                                it.put("priority", ep.optInt("loginProviderPriority", 99))
+                            })
+                        }
+                        parsed = arr.length() > 0
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("GfnPlugin", "getLoginProviders parse failed: ${e.message}")
+                }
+            }
+            // Fall back to hardcoded default if fetch/parse failed
+            if (!parsed) {
+                arr.put(JSObject().also {
+                    it.put("idpId", "PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg")
+                    it.put("code", "NVIDIA")
+                    it.put("displayName", "NVIDIA")
+                    it.put("streamingServiceUrl", "https://prod.cloudmatchbeta.nvidiagrid.net/")
+                    it.put("priority", 1)
+                })
+            }
+            JSObject().also { it.put("providers", arr) }
+        })
     }
 
     /**
@@ -930,8 +967,42 @@ class GfnPlugin : Plugin() {
 
     @PluginMethod
     fun getRegions(call: PluginCall) {
+        // GFN does not expose a public regions API -- use the known zone list.
+        val knownRegions = listOf(
+            // US
+            Pair("US - Northern California",  "https://prod.us-ca.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Georgia",              "https://prod.us-ga.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Arizona",              "https://prod.us-az.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - New Jersey",           "https://prod.us-nj.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Illinois",             "https://prod.us-il.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Oregon",               "https://prod.us-or.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Southern California",  "https://prod.us-socal.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Texas",                "https://prod.us-tx.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Virginia",             "https://prod.us-va.cloudmatchbeta.nvidiagrid.net"),
+            Pair("US - Florida",              "https://prod.us-fl.cloudmatchbeta.nvidiagrid.net"),
+            // EU
+            Pair("EU - Netherlands North",    "https://prod.eu-nl-north.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - Sweden",               "https://prod.eu-se.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - Netherlands South",    "https://prod.eu-nl-south.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - United Kingdom",       "https://prod.eu-uk.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - France",               "https://prod.eu-fr.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - Germany",              "https://prod.eu-de.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - Bulgaria",             "https://prod.eu-bg.cloudmatchbeta.nvidiagrid.net"),
+            Pair("EU - Poland",               "https://prod.eu-pl.cloudmatchbeta.nvidiagrid.net"),
+            // JP
+            Pair("JP - Japan",                "https://prod.jp.cloudmatchbeta.nvidiagrid.net"),
+            // CA
+            Pair("CA - Quebec",               "https://prod.ca-qc.cloudmatchbeta.nvidiagrid.net")
+        )
+        val arr = com.getcapacitor.JSArray()
+        for ((name, url) in knownRegions) {
+            arr.put(JSObject().also {
+                it.put("name", name)
+                it.put("url", url)
+            })
+        }
         val result = JSObject()
-        result.put("regions", com.getcapacitor.JSArray())
+        result.put("regions", arr)
         call.resolve(result)
     }
 
@@ -1072,6 +1143,15 @@ class GfnPlugin : Plugin() {
 
     @PluginMethod
     fun toggleFullscreen(call: PluginCall) {
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setOrientation(call: PluginCall) {
+        val mode = call.getString("mode", "sensor") ?: "sensor"
+        activity.runOnUiThread {
+            (activity as? MainActivity)?.applyOrientation(mode)
+        }
         call.resolve()
     }
 

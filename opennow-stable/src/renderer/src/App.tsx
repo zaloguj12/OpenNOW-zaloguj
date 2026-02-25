@@ -513,7 +513,7 @@ export function App(): JSX.Element {
         if (persistedSession) {
           // Load regions
           const token = persistedSession.tokens.idToken ?? persistedSession.tokens.accessToken;
-          const discovered = await getPlatformApi().getRegions({ token });
+          const discovered = await getPlatformApi().getRegions({ token, providerStreamingBaseUrl: persistedSession.provider.streamingServiceUrl } as any);
           setRegions(discovered);
 
           try {
@@ -649,6 +649,18 @@ export function App(): JSX.Element {
       }
     };
   }, []);
+
+  // Force landscape orientation on Android while streaming
+  useEffect(() => {
+    if (!isAndroid()) return;
+    const api = getPlatformApi() as any;
+    if (typeof api.setOrientation !== "function") return;
+    if (streamStatus === "streaming") {
+      api.setOrientation("landscape");
+    } else if (streamStatus === "idle") {
+      api.setOrientation("sensor");
+    }
+  }, [streamStatus]);
 
   // Listen for F11 fullscreen toggle from main process
   useEffect(() => {
@@ -835,7 +847,7 @@ export function App(): JSX.Element {
       // Load the rest in the background -- don't block the UI
       const token = session.tokens.idToken ?? session.tokens.accessToken;
 
-      getPlatformApi().getRegions({ token }).then(setRegions).catch(() => {});
+      getPlatformApi().getRegions({ token, providerStreamingBaseUrl: session.provider?.streamingServiceUrl } as any).then(setRegions).catch(() => {});
       loadSubscriptionInfo(session).catch(() => setSubscriptionInfo(null));
 
       getPlatformApi().fetchMainGames({
@@ -1539,7 +1551,8 @@ export function App(): JSX.Element {
                 void handleDismissLaunchError();
                 return;
               }
-              void handlePromptedStopStream();
+              // During loading (not yet streaming) skip the exit prompt and cancel directly.
+              void handleStopStream();
             }}
           />
         )}

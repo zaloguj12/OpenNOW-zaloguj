@@ -96,8 +96,11 @@ function buildCapacitorApi(): OpenNowApi {
       ),
     getLoginProviders: () =>
       callNativePlugin<{ providers: any[] }>("getLoginProviders").then((r) => r.providers ?? []),
-    getRegions: (input?) =>
-      callNativePlugin<{ regions: any[] }>("getRegions", input as any).then((r) => r.regions ?? []),
+    getRegions: (input?) => {
+      const token = (input as any)?.token;
+      const baseUrl = (input as any)?.providerStreamingBaseUrl ?? (input as any)?.streamingBaseUrl ?? "";
+      return callNativePlugin<{ regions: any[] }>("getRegions", { token, streamingBaseUrl: baseUrl }).then((r) => r.regions ?? []);
+    },
 
     login: (input) => callNativePlugin("login", input as any),
     logout: () => callNativePlugin("logout"),
@@ -150,6 +153,7 @@ function buildCapacitorApi(): OpenNowApi {
       return () => fullscreenListeners.delete(listener);
     },
     toggleFullscreen: () => callNativePlugin("toggleFullscreen"),
+    setOrientation: (mode: string) => callNativePlugin("setOrientation", { mode }),
     togglePointerLock: () => Promise.resolve(), // no pointer lock on touch screens
 
     getSettings: () =>
