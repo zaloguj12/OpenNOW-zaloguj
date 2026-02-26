@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.zortos.opennow.app-mergeDebugResources-28:/values-ldltr-v21/values-ldltr-v21.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\patri\\.gradle\\caches\\8.14.3\\transforms\\5d02552a3df8f750a2b7370d9f03f22d\\transformed\\appcompat-1.7.1\\res\\values-ldltr-v21\\values-ldltr-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "112",
+                        "endOffsets": "163"
+                    }
+                }
+            ]
+        }
+    ]
+}

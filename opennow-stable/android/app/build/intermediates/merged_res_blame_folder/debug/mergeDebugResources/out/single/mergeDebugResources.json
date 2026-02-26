@@ -1,0 +1,138 @@
+[
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-land-xhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-land-xhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-port-xxxhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-port-xxxhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-land-xxhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-land-xxhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-port-xxhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-port-xxhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/xml_config.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/xml/config.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-land-xxxhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-land-xxxhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-mdpi_ic_launcher_foreground.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-mdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-hdpi_ic_launcher_foreground.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-hdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-port-xhdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-port-xhdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/layout_activity_main.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-v24_ic_launcher_foreground.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-v24/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/xml_network_security_config.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/xml_file_paths.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-land-mdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-land-mdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-port-mdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-port-mdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-land-hdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-land-hdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/drawable-port-hdpi_splash.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/drawable-port-hdpi/splash.png"
+    },
+    {
+        "merged": "com.zortos.opennow.app-debug-30:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.zortos.opennow.app-main-32:/mipmap-xxxhdpi/ic_launcher_round.png"
+    }
+]

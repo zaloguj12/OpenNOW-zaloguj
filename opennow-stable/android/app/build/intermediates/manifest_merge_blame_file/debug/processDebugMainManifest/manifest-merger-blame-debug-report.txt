@@ -1,0 +1,190 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.zortos.opennow"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="36" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:52:5-67
+11-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:52:22-64
+12    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+12-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:53:5-71
+12-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:53:22-68
+13
+14    <permission
+14-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:22:5-24:47
+15        android:name="com.zortos.opennow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+15-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:23:9-81
+16        android:protectionLevel="signature" />
+16-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:24:9-44
+17
+18    <uses-permission android:name="com.zortos.opennow.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+18-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:26:5-97
+18-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:26:22-94
+19
+20    <application
+20-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:4:5-50:19
+21        android:allowBackup="true"
+21-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:5:9-35
+22        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+22-->[androidx.core:core:1.17.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\671f6192bbd1f5eea31e8d949630633c\transformed\core-1.17.0\AndroidManifest.xml:28:18-86
+23        android:debuggable="true"
+24        android:extractNativeLibs="false"
+25        android:icon="@mipmap/ic_launcher"
+25-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:6:9-43
+26        android:label="@string/app_name"
+26-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:7:9-41
+27        android:networkSecurityConfig="@xml/network_security_config"
+27-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:12:9-69
+28        android:roundIcon="@mipmap/ic_launcher_round"
+28-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:8:9-54
+29        android:supportsRtl="true"
+29-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:9:9-35
+30        android:theme="@style/AppTheme"
+30-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:10:9-40
+31        android:usesCleartextTraffic="true" >
+31-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:11:9-44
+32        <activity
+32-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:14:9-36:20
+33            android:name="com.zortos.opennow.MainActivity"
+33-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:16:13-59
+34            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+34-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:15:13-148
+35            android:exported="true"
+35-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:20:13-36
+36            android:label="@string/title_activity_main"
+36-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:17:13-56
+37            android:launchMode="singleTask"
+37-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:19:13-44
+38            android:theme="@style/AppTheme.NoActionBarLaunch" >
+38-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:18:13-62
+39
+40            <!-- App launcher -->
+41            <intent-filter>
+41-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:23:13-26:29
+42                <action android:name="android.intent.action.MAIN" />
+42-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:24:17-69
+42-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:24:25-66
+43
+44                <category android:name="android.intent.category.LAUNCHER" />
+44-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:25:17-77
+44-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:25:27-74
+45            </intent-filter>
+46
+47            <!-- Return-to-app button on the login complete page -->
+48            <intent-filter>
+48-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:29:13-34:29
+49                <action android:name="android.intent.action.VIEW" />
+49-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:30:17-69
+49-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:30:25-66
+50
+51                <category android:name="android.intent.category.DEFAULT" />
+51-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:31:17-76
+51-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:31:27-73
+52                <category android:name="android.intent.category.BROWSABLE" />
+52-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:32:17-78
+52-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:32:27-75
+53
+54                <data
+54-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:33:17-70
+55                    android:host="auth"
+55-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:33:48-67
+56                    android:scheme="opennow" />
+56-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:33:23-47
+57            </intent-filter>
+58        </activity>
+59        <activity
+59-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:38:9-39:47
+60            android:name="com.zortos.opennow.LoginActivity"
+60-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:38:19-66
+61            android:theme="@style/AppTheme" />
+61-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:39:13-44
+62
+63        <provider
+64            android:name="androidx.core.content.FileProvider"
+64-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:42:13-62
+65            android:authorities="com.zortos.opennow.fileprovider"
+65-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:43:13-64
+66            android:exported="false"
+66-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:44:13-37
+67            android:grantUriPermissions="true" >
+67-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:45:13-47
+68            <meta-data
+68-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:46:13-48:64
+69                android:name="android.support.FILE_PROVIDER_PATHS"
+69-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:47:17-67
+70                android:resource="@xml/file_paths" />
+70-->D:\Projects\gfnclient\OpenNOW\opennow-stable\android\app\src\main\AndroidManifest.xml:48:17-51
+71        </provider>
+72        <provider
+72-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+73            android:name="androidx.startup.InitializationProvider"
+73-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+74            android:authorities="com.zortos.opennow.androidx-startup"
+74-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+75            android:exported="false" >
+75-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+76            <meta-data
+76-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+77                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+77-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+78                android:value="androidx.startup" />
+78-->[androidx.emoji2:emoji2:1.3.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\c90b3d70295cb3953b32d23b1ce24105\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+79            <meta-data
+79-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\patri\.gradle\caches\8.14.3\transforms\8b8b4071281e1f486173cd14d7147a9b\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:29:13-31:52
+80                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+80-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\patri\.gradle\caches\8.14.3\transforms\8b8b4071281e1f486173cd14d7147a9b\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:30:17-78
+81                android:value="androidx.startup" />
+81-->[androidx.lifecycle:lifecycle-process:2.6.2] C:\Users\patri\.gradle\caches\8.14.3\transforms\8b8b4071281e1f486173cd14d7147a9b\transformed\lifecycle-process-2.6.2\AndroidManifest.xml:31:17-49
+82            <meta-data
+82-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:29:13-31:52
+83                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+83-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:30:17-85
+84                android:value="androidx.startup" />
+84-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:31:17-49
+85        </provider>
+86
+87        <receiver
+87-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:34:9-52:20
+88            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+88-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:35:13-76
+89            android:directBootAware="false"
+89-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:36:13-44
+90            android:enabled="true"
+90-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:37:13-35
+91            android:exported="true"
+91-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:38:13-36
+92            android:permission="android.permission.DUMP" >
+92-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:39:13-57
+93            <intent-filter>
+93-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:40:13-42:29
+94                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+94-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:17-91
+94-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:25-88
+95            </intent-filter>
+96            <intent-filter>
+96-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:43:13-45:29
+97                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+97-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:17-85
+97-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:25-82
+98            </intent-filter>
+99            <intent-filter>
+99-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:46:13-48:29
+100                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+100-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:17-88
+100-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:25-85
+101            </intent-filter>
+102            <intent-filter>
+102-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:49:13-51:29
+103                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+103-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:17-95
+103-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\patri\.gradle\caches\8.14.3\transforms\55ea5e60044313a4041ca0604f76d9cd\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:25-92
+104            </intent-filter>
+105        </receiver>
+106    </application>
+107
+108</manifest>

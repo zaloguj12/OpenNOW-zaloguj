@@ -1,0 +1,37 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.zortos.opennow.app-mergeDebugResources-28:/values-night-v8/values-night-v8.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\patri\\.gradle\\caches\\8.14.3\\transforms\\5d02552a3df8f750a2b7370d9f03f22d\\transformed\\appcompat-1.7.1\\res\\values-night-v8\\values-night-v8.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,125,209,293,389,491,593,687",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "120,204,288,384,486,588,682,771"
+                    },
+                    "to": {
+                        "startLines": "5,6,7,8,9,10,11,12",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "200,270,354,438,534,636,738,832",
+                        "endColumns": "69,83,83,95,101,101,93,88",
+                        "endOffsets": "265,349,433,529,631,733,827,916"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\patri\\.gradle\\caches\\8.14.3\\transforms\\505b0935a98197788cf2d31f4c3e1da2\\transformed\\core-splashscreen-1.2.0\\res\\values-night-v8\\values-night-v8.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "4",
+                        "endColumns": "12",
+                        "endOffsets": "195"
+                    }
+                }
+            ]
+        }
+    ]
+}

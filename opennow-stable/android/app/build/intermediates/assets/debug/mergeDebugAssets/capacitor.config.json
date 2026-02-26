@@ -1,0 +1,22 @@
+{
+	"appId": "com.zortos.opennow.android",
+	"appName": "OpenNOW",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {
+		"allowMixedContent": false,
+		"captureInput": true,
+		"webContentsDebuggingEnabled": false
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 1500,
+			"launchAutoHide": true,
+			"backgroundColor": "#0f172a",
+			"androidSplashResourceName": "splash",
+			"showSpinner": false
+		}
+	}
+}
