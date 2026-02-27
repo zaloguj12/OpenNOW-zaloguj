@@ -859,6 +859,8 @@ class GfnPlugin : Plugin() {
         val baseUrl = call.getString("streamingBaseUrl", "https://prod.cloudmatchbeta.nvidiagrid.net/")!!
         val appId = call.getString("appId") ?: run { call.reject("Missing appId"); return }
 
+        val requestedZoneAddress = call.getString("requestedZoneAddress", "")!!.trim().ifEmpty { null }
+
         val bodyJson = JSONObject().apply {
             put("sessionRequestData", JSONObject().apply {
                 put("appId", appId)
@@ -872,6 +874,7 @@ class GfnPlugin : Plugin() {
                 put("appLaunchMode", 1)
                 put("accountLinked", true)
                 put("userAge", 26)
+                if (requestedZoneAddress != null) put("requestedZoneAddress", requestedZoneAddress)
             })
         }.toString()
 
@@ -968,31 +971,36 @@ class GfnPlugin : Plugin() {
     @PluginMethod
     fun getRegions(call: PluginCall) {
         // GFN does not expose a public regions API -- use the known zone list.
+        // Zone address hostnames from GFN v2/serverInfo metaData (authenticated response).
+        // These are passed as requestedZoneAddress in the session create body.
+        // Verified from live API response 2026-02-27.
         val knownRegions = listOf(
             // US
-            Pair("US - Northern California",  "https://prod.us-ca.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Georgia",              "https://prod.us-ga.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Arizona",              "https://prod.us-az.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - New Jersey",           "https://prod.us-nj.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Illinois",             "https://prod.us-il.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Oregon",               "https://prod.us-or.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Southern California",  "https://prod.us-socal.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Texas",                "https://prod.us-tx.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Virginia",             "https://prod.us-va.cloudmatchbeta.nvidiagrid.net"),
-            Pair("US - Florida",              "https://prod.us-fl.cloudmatchbeta.nvidiagrid.net"),
-            // EU
-            Pair("EU - Netherlands North",    "https://prod.eu-nl-north.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - Sweden",               "https://prod.eu-se.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - Netherlands South",    "https://prod.eu-nl-south.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - United Kingdom",       "https://prod.eu-uk.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - France",               "https://prod.eu-fr.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - Germany",              "https://prod.eu-de.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - Bulgaria",             "https://prod.eu-bg.cloudmatchbeta.nvidiagrid.net"),
-            Pair("EU - Poland",               "https://prod.eu-pl.cloudmatchbeta.nvidiagrid.net"),
-            // JP
-            Pair("JP - Japan",                "https://prod.jp.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Northern California (USA)", "us-california-north.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Southern California (USA)", "us-california-south.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Oregon (USA)",              "us-oregon.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Arizona (USA)",             "us-arizona.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Texas (USA)",               "us-texas.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Illinois (USA)",            "us-illinois.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Florida (USA)",             "us-florida.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Georgia (USA)",             "us-georgia.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Virginia (USA)",            "us-virginia.cloudmatchbeta.nvidiagrid.net"),
+            Pair("New Jersey (USA)",          "us-new-jersey.cloudmatchbeta.nvidiagrid.net"),
             // CA
-            Pair("CA - Quebec",               "https://prod.ca-qc.cloudmatchbeta.nvidiagrid.net")
+            Pair("Quebec (Canada)",           "ca-quebec.cloudmatchbeta.nvidiagrid.net"),
+            // EU
+            Pair("United Kingdom 1",          "eu-united-kingdom-1.cloudmatchbeta.nvidiagrid.net"),
+            Pair("United Kingdom 2",          "eu-united-kingdom-2.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Sweden",                    "eu-sweden.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Netherlands North",         "eu-netherlands-north.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Netherlands South",         "eu-netherlands-south.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Germany",                   "eu-germany.cloudmatchbeta.nvidiagrid.net"),
+            Pair("France 1",                  "eu-france-1.cloudmatchbeta.nvidiagrid.net"),
+            Pair("France 2",                  "eu-france-2.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Poland",                    "eu-poland.cloudmatchbeta.nvidiagrid.net"),
+            Pair("Bulgaria",                  "eu-bulgaria.cloudmatchbeta.nvidiagrid.net"),
+            // AP
+            Pair("Japan",                     "ap-japan.cloudmatchbeta.nvidiagrid.net")
         )
         val arr = com.getcapacitor.JSArray()
         for ((name, url) in knownRegions) {

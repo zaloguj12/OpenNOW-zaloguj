@@ -90,6 +90,11 @@ export interface CloudMatchResponse {
     };
     errorCode?: number;
     gpuType?: string;
+    seatSetupInfo?: {
+      seatSetupStep?: number;   // 1 = InQueue, other = provisioning
+      queuePosition?: number;
+      seatSetupEta?: number;    // seconds
+    };
     connectionInfo?: Array<{
       ip?: string;
       port: number;

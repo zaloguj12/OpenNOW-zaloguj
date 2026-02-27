@@ -310,6 +310,7 @@ function timezoneOffsetMs(): number {
 
 function buildSessionRequestBody(input: SessionCreateRequest): CloudMatchRequest {
   const { width, height } = parseResolution(input.settings.resolution);
+  const requestedZoneAddress = input.requestedZoneAddress?.trim() || undefined;
   const cq = input.settings.colorQuality;
   // IMPORTANT: hdrEnabled is a SEPARATE toggle from color quality.
   // The Rust reference (cloudmatch.rs) uses settings.hdr_enabled independently.
@@ -380,6 +381,7 @@ function buildSessionRequestBody(input: SessionCreateRequest): CloudMatchRequest
       accountLinked,
       enablePersistingInGameSettings: true,
       userAge: 26,
+      ...(requestedZoneAddress ? { requestedZoneAddress } : {}),
       requestedStreamingFeatures: {
         reflex: input.settings.fps >= 120,
         bitDepth,
@@ -444,26 +446,53 @@ function toPositiveInt(value: unknown): number | undefined {
 }
 
 function extractQueuePosition(payload: CloudMatchResponse): number | undefined {
-  const direct = toPositiveInt(payload.session.queuePosition);
-  if (direct !== undefined) {
-    return direct;
+  // Primary: seatSetupInfo (official client reads seatSetupInfo.queuePosition when seatSetupStep==1)
+  const seat = payload.session.seatSetupInfo;
+  if (seat?.seatSetupStep === 1) {
+    const pos = toPositiveInt(seat.queuePosition);
+    if (pos !== undefined) return pos;
   }
 
+  // Fallback: direct field
+  const direct = toPositiveInt(payload.session.queuePosition);
+  if (direct !== undefined) return direct;
+
+  // Fallback: sessionProgress
   const nestedSessionProgress = payload.session.sessionProgress;
   if (nestedSessionProgress) {
     const nested = toPositiveInt(nestedSessionProgress.queuePosition);
-    if (nested !== undefined) {
-      return nested;
-    }
+    if (nested !== undefined) return nested;
   }
 
+  // Fallback: progressInfo
   const nestedProgressInfo = payload.session.progressInfo;
   if (nestedProgressInfo) {
     const nested = toPositiveInt(nestedProgressInfo.queuePosition);
-    if (nested !== undefined) {
-      return nested;
-    }
+    if (nested !== undefined) return nested;
   }
+
+  return undefined;
+}
+
+function extractQueueEta(payload: CloudMatchResponse): number | undefined {
+  // Primary: seatSetupInfo.seatSetupEta (seconds)
+  const seat = payload.session.seatSetupInfo;
+  if (seat?.seatSetupStep === 1 && typeof seat.seatSetupEta === "number" && seat.seatSetupEta > 0) {
+    return seat.seatSetupEta;
+  }
+
+  // Fallback: direct eta
+  if (typeof payload.session.eta === "number" && payload.session.eta > 0) {
+    return payload.session.eta;
+  }
+
+  // Fallback: sessionProgress.eta
+  const eta1 = payload.session.sessionProgress?.eta;
+  if (typeof eta1 === "number" && eta1 > 0) return eta1;
+
+  // Fallback: progressInfo.eta
+  const eta2 = payload.session.progressInfo?.eta;
+  if (typeof eta2 === "number" && eta2 > 0) return eta2;
 
   return undefined;
 }
@@ -477,6 +506,7 @@ function toSessionInfo(zone: string, streamingBaseUrl: string, payload: CloudMat
 
   const signaling = resolveSignaling(payload);
   const queuePosition = extractQueuePosition(payload);
+  const queueEta = extractQueueEta(payload);
 
   // Debug logging to trace signaling resolution
   const connections = payload.session.connectionInfo ?? [];
@@ -499,6 +529,7 @@ function toSessionInfo(zone: string, streamingBaseUrl: string, payload: CloudMat
     sessionId: payload.session.sessionId,
     status: payload.session.status,
     queuePosition,
+    queueEta,
     zone,
     streamingBaseUrl,
     serverIp: signaling.serverIp,
@@ -520,6 +551,7 @@ export async function createSession(input: SessionCreateRequest): Promise<Sessio
   }
 
   const body = buildSessionRequestBody(input);
+  console.log("[DEBUG] session request body:", JSON.stringify(body, null, 2));
 
   const base = resolveStreamingBaseUrl(input.zone, input.streamingBaseUrl);
   const url = `${base}/v2/session?keyboardLayout=en-US&languageCode=en_US`;
@@ -536,6 +568,8 @@ export async function createSession(input: SessionCreateRequest): Promise<Sessio
   }
 
   const payload = JSON.parse(text) as CloudMatchResponse;
+  // Log full raw response so we can see if server returned serverId, assignedZone, etc.
+  console.log("[DEBUG] createSession raw response:", JSON.stringify(payload, null, 2));
   return toSessionInfo(input.zone, base, payload);
 }
 
@@ -571,6 +605,11 @@ export async function pollSession(input: SessionPollRequest): Promise<SessionInf
     realServerIp.length > 0 &&
     !isZoneHostname(realServerIp) &&
     realServerIp !== input.serverIp;
+
+  // Log poll response when session becomes ready (status 2 or 3) so we can check assigned zone
+  if (payload.session.status === 2 || payload.session.status === 3) {
+    console.log("[DEBUG] pollSession ready response:", JSON.stringify(payload, null, 2));
+  }
 
   if (polledViaZone && realIpDiffers && (payload.session.status === 2 || payload.session.status === 3)) {
     // Session is ready and we now know the real server IP — re-poll directly

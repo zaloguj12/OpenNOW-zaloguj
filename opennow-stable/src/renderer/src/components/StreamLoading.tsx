@@ -23,7 +23,6 @@ const steps = [
 
 function getStatusMessage(
   status: StreamLoadingProps["status"],
-  queuePosition?: number,
   isError = false,
 ): string {
   if (isError) {
@@ -31,7 +30,7 @@ function getStatusMessage(
   }
   switch (status) {
     case "queue":
-      return queuePosition ? `Position #${queuePosition} in queue` : "Waiting in queue...";
+      return "Waiting in queue...";
     case "setup":
       return "Setting up your gaming rig...";
     case "starting":
@@ -68,7 +67,7 @@ export function StreamLoading({
 }: StreamLoadingProps): JSX.Element {
   const hasError = Boolean(error);
   const activeStepIndex = getActiveStepIndex(status);
-  const statusMessage = getStatusMessage(status, queuePosition, hasError);
+  const statusMessage = getStatusMessage(status, hasError);
 
   return (
     <div className={`sload${hasError ? " sload--error" : ""}`}>
@@ -142,7 +141,6 @@ export function StreamLoading({
             {status === "queue" && queuePosition !== undefined && queuePosition > 0 && (
               <p className="sload-queue">
                 Position <span className="sload-queue-num">#{queuePosition}</span>
-                {estimatedWait && <span className="sload-wait"> · ~{estimatedWait}</span>}
               </p>
             )}
           </div>

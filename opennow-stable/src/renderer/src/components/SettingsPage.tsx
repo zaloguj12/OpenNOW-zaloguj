@@ -1,4 +1,4 @@
-import { Globe, Save, Check, Search, X, Loader, Zap, Mic } from "lucide-react";
+import { Globe, Save, Check, Search, X, Loader, Zap, Mic, User, LogOut } from "lucide-react";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type { JSX } from "react";
 
@@ -10,6 +10,8 @@ import type {
   EntitledResolution,
   VideoAccelerationPreference,
   MicrophoneMode,
+  AuthUser,
+  SubscriptionInfo,
 } from "@shared/gfn";
 import { colorQualityRequiresHevc } from "@shared/gfn";
 import { formatShortcutForDisplay, normalizeShortcut } from "../shortcuts";
@@ -18,6 +20,9 @@ interface SettingsPageProps {
   settings: Settings;
   regions: StreamRegion[];
   onSettingChange: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  user: AuthUser | null;
+  subscription: SubscriptionInfo | null;
+  onLogout: () => void;
 }
 
 const codecOptions: VideoCodec[] = ["H264", "H265", "AV1"];
@@ -432,7 +437,15 @@ async function testCodecSupport(): Promise<CodecTestResult[]> {
 
 /* ── Component ────────────────────────────────────────────────────── */
 
-export function SettingsPage({ settings, regions, onSettingChange }: SettingsPageProps): JSX.Element {
+function getTierDisplay(tier: string): { label: string; className: string } {
+  const t = tier.toUpperCase();
+  if (t === "ULTIMATE") return { label: "Ultimate", className: "tier-ultimate" };
+  if (t === "PRIORITY" || t === "PERFORMANCE") return { label: "Priority", className: "tier-priority" };
+  return { label: "Free", className: "tier-free" };
+}
+
+export function SettingsPage({ settings, regions, onSettingChange, user, subscription, onLogout }: SettingsPageProps): JSX.Element {
+  const tierInfo = user ? getTierDisplay(user.membershipTier) : null;
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [regionSearch, setRegionSearch] = useState("");
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
@@ -743,6 +756,36 @@ export function SettingsPage({ settings, regions, onSettingChange }: SettingsPag
 
   return (
     <div className="settings-page">
+      {/* User profile card */}
+      {user && (
+        <div className="settings-profile">
+          <div className="settings-profile-avatar">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.displayName} className="settings-profile-img" />
+            ) : (
+              <div className="settings-profile-icon"><User size={28} /></div>
+            )}
+          </div>
+          <div className="settings-profile-info">
+            <span className="settings-profile-name">{user.displayName}</span>
+            {user.email && <span className="settings-profile-email">{user.email}</span>}
+            {tierInfo && <span className={`settings-profile-tier ${tierInfo.className}`}>{tierInfo.label}</span>}
+            {subscription && !subscription.isUnlimited && (
+              <span className="settings-profile-time">
+                {subscription.remainingHours.toFixed(1)}h remaining
+              </span>
+            )}
+            {subscription?.isUnlimited && (
+              <span className="settings-profile-time">Unlimited</span>
+            )}
+          </div>
+          <button className="settings-profile-logout" onClick={onLogout} title="Sign out">
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
+        </div>
+      )}
+
       <header className="settings-header">
         <h1>Settings</h1>
         <div className={`settings-saved ${savedIndicator ? "visible" : ""}`}>

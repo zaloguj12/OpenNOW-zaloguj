@@ -203,6 +203,7 @@ export interface SessionCreateRequest {
   internalTitle: string;
   accountLinked?: boolean;
   zone: string;
+  requestedZoneAddress?: string;
   settings: StreamSettings;
 }
 
@@ -237,6 +238,7 @@ export interface SessionInfo {
   sessionId: string;
   status: number;
   queuePosition?: number;
+  queueEta?: number;  // seconds until out of queue
   zone: string;
   streamingBaseUrl?: string;
   serverIp: string;

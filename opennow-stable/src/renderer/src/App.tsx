@@ -309,6 +309,7 @@ export function App(): JSX.Element {
   const [exitPrompt, setExitPrompt] = useState<ExitPromptState>({ open: false, gameTitle: "Game" });
   const [streamingGame, setStreamingGame] = useState<GameInfo | null>(null);
   const [queuePosition, setQueuePosition] = useState<number | undefined>();
+  const [queueEta, setQueueEta] = useState<number | undefined>();
   const [navbarActiveSession, setNavbarActiveSession] = useState<ActiveSessionInfo | null>(null);
   const [isResumingNavbarSession, setIsResumingNavbarSession] = useState(false);
   const [launchError, setLaunchError] = useState<LaunchErrorState | null>(null);
@@ -988,6 +989,7 @@ export function App(): JSX.Element {
     setStreamingGame(game);
     updateLoadingStep("queue");
     setQueuePosition(undefined);
+    setQueueEta(undefined);
 
     try {
       const token = authSession?.tokens.idToken ?? authSession?.tokens.accessToken;
@@ -1023,7 +1025,9 @@ export function App(): JSX.Element {
       // Check for active sessions first
       if (token) {
         try {
+          console.log("[DEBUG] checking for active sessions...");
           const activeSessions = await getPlatformApi().getActiveSessions(token, effectiveStreamingBaseUrl);
+          console.log("[DEBUG] active sessions:", activeSessions.length);
           if (activeSessions.length > 0) {
             const existingSession = activeSessions[0];
             await claimAndConnectSession(existingSession);
@@ -1037,13 +1041,26 @@ export function App(): JSX.Element {
       }
 
       // Create new session
+      // If a region is selected, POST the session directly to that zone's URL.
+      // The official GFN client achieves zone selection by routing the POST to
+      // the chosen zone's cloudmatch endpoint, NOT via requestedZoneAddress.
+      const sessionStreamingBaseUrl = settings.region
+        ? settings.region.startsWith("http")
+          ? settings.region.replace(/\/$/, "")
+          : `https://${settings.region}`
+        : effectiveStreamingBaseUrl;
+      console.log("[DEBUG] settings.region =", settings.region);
+      console.log("[DEBUG] sessionStreamingBaseUrl =", sessionStreamingBaseUrl);
       const newSession = await getPlatformApi().createSession({
         token: token || undefined,
-        streamingBaseUrl: effectiveStreamingBaseUrl,
+        streamingBaseUrl: sessionStreamingBaseUrl,
         appId,
         internalTitle: game.title,
         accountLinked: game.playType !== "INSTALL_TO_PLAY",
         zone: "prod",
+        requestedZoneAddress: settings.region
+          ? (() => { try { return new URL(settings.region).hostname || settings.region; } catch { return settings.region; } })()
+          : undefined,
         settings: {
           resolution: settings.resolution,
           fps: settings.fps,
@@ -1055,9 +1072,10 @@ export function App(): JSX.Element {
 
       setSession(newSession);
       setQueuePosition(newSession.queuePosition);
+      setQueueEta(newSession.queueEta);
 
       let finalSession: SessionInfo | null = null;
-      let isInQueueMode = (newSession.queuePosition ?? 0) > 1;
+      let isInQueueMode = (newSession.queuePosition ?? 0) >= 1;
       let timeoutStartAttempt = 1;
       const maxAttempts = Math.ceil(SESSION_READY_TIMEOUT_MS / SESSION_READY_POLL_INTERVAL_MS);
       let attempt = 0;
@@ -1076,9 +1094,10 @@ export function App(): JSX.Element {
 
         setSession(polled);
         setQueuePosition(polled.queuePosition);
+        setQueueEta(polled.queueEta);
 
         const wasInQueueMode = isInQueueMode;
-        isInQueueMode = (polled.queuePosition ?? 0) > 1;
+        isInQueueMode = (polled.queuePosition ?? 0) >= 1;
         if (wasInQueueMode && !isInQueueMode) {
           timeoutStartAttempt = attempt;
         }
@@ -1104,6 +1123,7 @@ export function App(): JSX.Element {
       }
 
       setQueuePosition(undefined);
+      setQueueEta(undefined);
       updateLoadingStep("connecting");
 
       const sessionToConnect = sessionRef.current ?? finalSession ?? newSession;
@@ -1128,6 +1148,7 @@ export function App(): JSX.Element {
       setSession(null);
       setStreamStatus("idle");
       setQueuePosition(undefined);
+      setQueueEta(undefined);
       setSessionStartedAtMs(null);
       setSessionElapsedSeconds(0);
       setStreamWarning(null);
@@ -1537,6 +1558,13 @@ export function App(): JSX.Element {
             gameCover={streamingGame?.imageUrl}
             status={loadingStatus}
             queuePosition={queuePosition}
+            estimatedWait={
+              queueEta !== undefined
+                ? queueEta >= 60
+                  ? `${Math.ceil(queueEta / 60)}m`
+                  : `${queueEta}s`
+                : undefined
+            }
             error={
               launchError
                 ? {
@@ -1578,15 +1606,12 @@ export function App(): JSX.Element {
       <Navbar
         currentPage={currentPage}
         onNavigate={setCurrentPage}
-        user={authSession.user}
-        subscription={subscriptionInfo}
         activeSession={navbarActiveSession}
         activeSessionGameTitle={activeSessionGameTitle}
         isResumingSession={isResumingNavbarSession}
         onResumeSession={() => {
           void handleResumeFromNavbar();
         }}
-        onLogout={handleLogout}
       />
 
       <main className="main-content">
@@ -1621,6 +1646,9 @@ export function App(): JSX.Element {
             settings={settings}
             regions={regions}
             onSettingChange={updateSetting}
+            user={authSession.user}
+            subscription={subscriptionInfo}
+            onLogout={handleLogout}
           />
         )}
       </main>
