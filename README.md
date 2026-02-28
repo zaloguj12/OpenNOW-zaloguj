@@ -1,3 +1,14 @@
+---
+
+> **Warning**  
+> OpenNOW is under active development. Bugs and performance issues are expected while features are finalized.
+
+> **Trademark & Affiliation Notice**  
+> OpenNOW is an independent community project and is **not affiliated with, endorsed by, or sponsored by NVIDIA Corporation**.  
+> **NVIDIA** and **GeForce NOW** are trademarks of NVIDIA Corporation. You must use your own GeForce NOW account.
+
+---
+
 # OpenNOW - Android
 
 Unofficial GeForce NOW client for Android, built with Capacitor + React + WebRTC.
