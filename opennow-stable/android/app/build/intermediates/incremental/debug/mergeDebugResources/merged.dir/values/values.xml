@@ -360,6 +360,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
@@ -1922,11 +1927,11 @@
     <declare-styleable name="ActionBar">
         
         <attr name="navigationMode">
-            <!-- Normal static title text -->
+            
             <enum name="normal" value="0"/>
-            <!-- The action bar will use a selection list for navigation. -->
+            
             <enum name="listMode" value="1"/>
-            <!-- The action bar will use a series of horizontal tabs for navigation. -->
+            
             <enum name="tabMode" value="2"/>
         </attr>
         
@@ -2078,22 +2083,17 @@
 
         
         <attr name="tintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and icon color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2105,22 +2105,17 @@
         <attr format="color" name="tickMarkTint"/>
         
         <attr name="tickMarkTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and drawable color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2141,10 +2136,9 @@
         <attr name="android:textAppearance"/>
         
         <attr format="enum" name="autoSizeTextType">
-            <!-- No auto-sizing (default). -->
+            
             <enum name="none" value="0"/>
-            <!-- Uniform horizontal and vertical text size scaling to fit within the
-            container. -->
+            
             <enum name="uniform" value="1"/>
         </attr>
         
@@ -2176,22 +2170,17 @@
         <attr format="color" name="drawableTint"/>
         
         <attr name="drawableTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and drawable color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
         
@@ -2579,22 +2568,17 @@
 
         
         <attr name="checkMarkTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and icon color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2617,22 +2601,17 @@
 
         
         <attr name="buttonTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and icon color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2653,76 +2632,70 @@
 
         
         <attr name="layout_anchorGravity">
-            <!-- Push object to the top of its container, not changing its size. -->
+            
             <flag name="top" value="0x30"/>
-            <!-- Push object to the bottom of its container, not changing its size. -->
+            
             <flag name="bottom" value="0x50"/>
-            <!-- Push object to the left of its container, not changing its size. -->
+            
             <flag name="left" value="0x03"/>
-            <!-- Push object to the right of its container, not changing its size. -->
+            
             <flag name="right" value="0x05"/>
-            <!-- Place object in the vertical center of its container, not changing its size. -->
+            
             <flag name="center_vertical" value="0x10"/>
-            <!-- Grow the vertical size of the object if needed so it completely fills its container. -->
+            
             <flag name="fill_vertical" value="0x70"/>
-            <!-- Place object in the horizontal center of its container, not changing its size. -->
+            
             <flag name="center_horizontal" value="0x01"/>
-            <!-- Grow the horizontal size of the object if needed so it completely fills its container. -->
+            
             <flag name="fill_horizontal" value="0x07"/>
-            <!-- Place the object in the center of its container in both the vertical and horizontal axis, not changing its size. -->
+            
             <flag name="center" value="0x11"/>
-            <!-- Grow the horizontal and vertical size of the object if needed so it completely fills its container. -->
+            
             <flag name="fill" value="0x77"/>
-            <!-- Additional option that can be set to have the top and/or bottom edges of
-                 the child clipped to its container's bounds.
-                 The clip will be based on the vertical gravity: a top gravity will clip the bottom
-                 edge, a bottom gravity will clip the top edge, and neither will clip both edges. -->
+            
             <flag name="clip_vertical" value="0x80"/>
-            <!-- Additional option that can be set to have the left and/or right edges of
-                 the child clipped to its container's bounds.
-                 The clip will be based on the horizontal gravity: a left gravity will clip the right
-                 edge, a right gravity will clip the left edge, and neither will clip both edges. -->
+            
             <flag name="clip_horizontal" value="0x08"/>
-            <!-- Push object to the beginning of its container, not changing its size. -->
+            
             <flag name="start" value="0x00800003"/>
-            <!-- Push object to the end of its container, not changing its size. -->
+            
             <flag name="end" value="0x00800005"/>
         </attr>
 
         
         <attr format="enum" name="layout_insetEdge">
-            <!-- Don't inset. -->
+            
             <enum name="none" value="0x0"/>
-            <!-- Inset the top edge. -->
+            
             <enum name="top" value="0x30"/>
-            <!-- Inset the bottom edge. -->
+            
             <enum name="bottom" value="0x50"/>
-            <!-- Inset the left edge. -->
+            
             <enum name="left" value="0x03"/>
-            <!-- Inset the right edge. -->
+            
             <enum name="right" value="0x05"/>
-            <!-- Inset the start edge. -->
+            
             <enum name="start" value="0x00800003"/>
-            <!-- Inset the end edge. -->
+            
             <enum name="end" value="0x00800005"/>
         </attr>
         
         <attr name="layout_dodgeInsetEdges">
-            <!-- Don't dodge any edges -->
+            
             <flag name="none" value="0x0"/>
-            <!-- Dodge the top inset edge. -->
+            
             <flag name="top" value="0x30"/>
-            <!-- Dodge the bottom inset edge. -->
+            
             <flag name="bottom" value="0x50"/>
-            <!-- Dodge the left inset edge. -->
+            
             <flag name="left" value="0x03"/>
-            <!-- Dodge the right inset edge. -->
+            
             <flag name="right" value="0x05"/>
-            <!-- Dodge the start inset edge. -->
+            
             <flag name="start" value="0x00800003"/>
-            <!-- Dodge the end inset edge. -->
+            
             <flag name="end" value="0x00800005"/>
-            <!-- Dodge all the inset edges. -->
+            
             <flag name="all" value="0x77"/>
         </attr>
     </declare-styleable>
@@ -2757,23 +2730,14 @@
         <attr format="reference" name="fontProviderCerts"/>
         
         <attr name="fontProviderFetchStrategy">
-            <!-- The blocking font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, request the
-              font from the provider and wait until it is finished.  You can change the length of
-              the timeout by modifying fontProviderFetchTimeout.  If the timeout happens, the
-              default typeface will be used instead. -->
+            
             <enum name="blocking" value="0"/>
-            <!-- The async font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, trigger a
-              request the font and continue with layout inflation. Once the font fetch succeeds, the
-              target text view will be refreshed with the downloaded font data. The
-              fontProviderFetchTimeout will be ignored if async loading is specified. -->
+            
             <enum name="async" value="1"/>
         </attr>
         
         <attr format="integer" name="fontProviderFetchTimeout">
-            <!-- A special value for the timeout. In this case, the blocking font fetching will not
-              timeout and wait until a reply is received from the font provider. -->
+            
             <enum name="forever" value="-1"/>
         </attr>
         
@@ -2976,24 +2940,15 @@
 
         
         <attr name="showAsAction">
-            <!-- Never show this item in an action bar, show it in the overflow menu instead.
-                 Mutually exclusive with "ifRoom" and "always". -->
+            
             <flag name="never" value="0"/>
-            <!-- Show this item in an action bar if there is room for it as determined
-                 by the system. Favor this option over "always" where possible.
-                 Mutually exclusive with "never" and "always". -->
+            
             <flag name="ifRoom" value="1"/>
-            <!-- Always show this item in an actionbar, even if it would override
-                 the system's limits of how much stuff to put there. This may make
-                 your action bar look bad on some screens. In most cases you should
-                 use "ifRoom" instead. Mutually exclusive with "ifRoom" and "never". -->
+            
             <flag name="always" value="2"/>
-            <!-- When this item is shown as an action in the action bar, show a text
-                 label with it even if it has an icon representation. -->
+            
             <flag name="withText" value="4"/>
-            <!-- This item's action view collapses to a normal menu
-                 item. When expanded, the action view takes over a
-                 larger segment of its container. -->
+            
             <flag name="collapseActionView" value="8"/>
         </attr>
 
@@ -3017,22 +2972,17 @@
 
         
         <attr name="iconTintMode">
-            <!-- The tint is drawn on top of the icon.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the icon. The icon’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the icon, but with the icon’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the icon with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and icon color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
 
@@ -3147,22 +3097,17 @@
         <attr format="color" name="thumbTint"/>
         
         <attr name="thumbTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and drawable color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
         
@@ -3171,22 +3116,17 @@
         <attr format="color" name="trackTint"/>
         
         <attr name="trackTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and drawable color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
         
@@ -3252,11 +3192,11 @@
         <attr name="contentInsetEndWithActions"/>
         <attr format="dimension" name="maxButtonHeight"/>
         <attr name="buttonGravity">
-            <!-- Place object in the vertical center of its container, not changing its size. -->
+            
             <flag name="center_vertical" value="0x10"/>
-            <!-- Push object to the top of its container, not changing its size. -->
+            
             <flag name="top" value="0x30"/>
-            <!-- Push object to the bottom of its container, not changing its size. -->
+            
             <flag name="bottom" value="0x50"/>
         </attr>
         
@@ -3300,22 +3240,17 @@
 
         
         <attr name="backgroundTintMode">
-            <!-- The tint is drawn on top of the drawable.
-                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            
             <enum name="src_over" value="3"/>
-            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
-                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            
             <enum name="src_in" value="5"/>
-            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
-                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            
             <enum name="src_atop" value="9"/>
-            <!-- Multiplies the color and alpha channels of the drawable with those of
-                 the tint. [Sa * Da, Sc * Dc] -->
+            
             <enum name="multiply" value="14"/>
-            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            
             <enum name="screen" value="15"/>
-            <!-- Combines the tint and icon color and alpha channels, clamping the
-                 result to valid color values. Saturate(S + D) -->
+            
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>

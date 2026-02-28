@@ -1,0 +1,105 @@
+SESSION 14 - Bug Fixes: Safe Area + Horizontal Scroll
+=======================================================
+Date: 2026-02-28
+STATUS: ROUND 4 COMPLETE
+
+TEST DEVICE: Xiaomi Redmi Note 14 (non-5G)
+  Screen: 6.67" AMOLED, 1080x2400px, ~393dp wide
+  OS: Android 14, HyperOS (Xiaomi skin)
+  Chip: MediaTek Helio G99-Ultra
+
+DEVICE-SPECIFIC NOTES
+----------------------
+HyperOS (Xiaomi's Android skin) handles edge-to-edge and system bar
+insets differently from stock Android. Specifically:
+- windowTranslucentStatus/Navigation flags can conflict with the modern
+  WindowCompat API and cause env() insets to return 0.
+- The correct approach for HyperOS is to use WindowCompat.setDecorFitsSystemWindows
+  (already done in MainActivity) PLUS set bar colors to transparent BOTH in
+  the theme XML and at runtime in onCreate().
+- windowLayoutInDisplayCutoutMode=shortEdges is also needed so the notch
+  area is handed to the app correctly.
+- The narrow screen (~393dp) is why the library toolbar was overflowing --
+  icon + title + search + count was too wide.
+
+KEY FILES
+----------
+- src/renderer/src/components/Navbar.tsx
+- src/renderer/src/components/SettingsPage.tsx
+- src/renderer/src/components/HomePage.tsx
+- src/renderer/src/components/LibraryPage.tsx    - now reuses home-* CSS classes
+- src/renderer/src/App.tsx
+- src/renderer/src/styles.css
+- android/app/src/main/java/com/zortos/opennow/MainActivity.kt
+- android/app/src/main/res/values/styles.xml
+
+BUILD COMMANDS
+--------------
+cd D:\Projects\gfnclient\OpenNOW\opennow-stable
+npm run build
+npx cap sync android
+cd android
+.\gradlew assembleDebug
+adb install app\build\outputs\apk\debug\app-debug.apk
+
+=======================================================
+ALL CHANGES MADE THIS SESSION (CUMULATIVE)
+=======================================================
+
+--- SAFE AREA FIXES ---
+
+MainActivity.kt:
+  - WindowCompat.setDecorFitsSystemWindows(window, false)  [was already there]
+  - Added: window.statusBarColor = Color.TRANSPARENT
+  - Added: window.navigationBarColor = Color.TRANSPARENT
+  These two lines are required for HyperOS to populate env() insets correctly.
+
+styles.xml (AppTheme.NoActionBar):
+  - Removed: windowTranslucentStatus (conflicts with WindowCompat API)
+  - Removed: windowTranslucentNavigation (conflicts with WindowCompat API)
+  - Added: android:statusBarColor = transparent
+  - Added: android:navigationBarColor = transparent
+  - Added: android:windowLayoutInDisplayCutoutMode = shortEdges
+
+styles.css (.app-container):
+  - Added: padding-top: env(safe-area-inset-top, 0px)
+  - Pushes all content below the status bar.
+
+styles.css (.navbar):
+  - Changed height from var(--navbar-h)
+    to calc(var(--navbar-h) + env(safe-area-inset-bottom, 0px))
+  - padding-bottom: env(safe-area-inset-bottom, 0px)  [was already there]
+  - The height grows to accommodate the gesture strip, padding pushes tabs up.
+
+styles.css (.main-content):
+  - margin-bottom: calc(var(--navbar-h) + env(safe-area-inset-bottom, 0px))
+  - Keeps content above the navbar including the safe area.
+
+--- HORIZONTAL SCROLL FIXES ---
+
+styles.css (html, body, #root):
+  - Added: overflow-x: hidden
+
+styles.css (.app-container):
+  - Added: overflow-x: hidden
+
+styles.css (.main-content):
+  - Added: overflow-x: hidden
+
+styles.css (.home-page, .settings-page):
+  - Added: overflow-x: hidden
+
+styles.css (.home-toolbar, .library-toolbar):
+  - Added: min-width: 0; overflow: hidden
+
+LibraryPage.tsx:
+  - Removed library-specific CSS classes entirely.
+  - Now uses home-page, home-toolbar, home-search, home-grid-area, home-count,
+    home-empty-state, home-spinner, home-empty-icon classes.
+  - This makes library layout pixel-identical to catalog/public.
+  - library-game-wrapper and library-last-played kept for the timestamp display.
+  - Library icon + "My Library" title removed from toolbar (tab bar labels it).
+
+=======================================================
+END OF SESSION 14
+=======================================================

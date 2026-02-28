@@ -2,13 +2,23 @@ package com.zortos.opennow
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.graphics.Color
 import android.os.Bundle
+import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import com.getcapacitor.BridgeActivity
 
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(GfnPlugin::class.java)
         super.onCreate(savedInstanceState)
+        // Draw edge-to-edge so the WebView fills under system bars.
+        // CSS then uses env(safe-area-inset-*) to avoid overlap.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Force transparent system bars at runtime - required for HyperOS/MIUI
+        // to correctly populate env(safe-area-inset-*) in the WebView.
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
     }
 
     /** Called by GfnPlugin.setOrientation to lock or restore screen rotation. */

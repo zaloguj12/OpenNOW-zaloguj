@@ -89,6 +89,8 @@ body,
   background: var(--bg-a);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* BUG2 FIX: prevent horizontal scroll on all pages */
+  overflow-x: hidden;
 }
 
 /* ---------- Scrollbar ---------- */
@@ -136,6 +138,10 @@ body,
   background:
     radial-gradient(900px 400px at 80% -5%, rgba(88, 217, 138, 0.03), transparent 70%),
     linear-gradient(180deg, var(--bg-a), var(--bg-b));
+  /* BUG2 FIX: prevent horizontal overflow */
+  overflow-x: hidden;
+  /* BUG1 FIX: push content below status bar */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .auth-refresh-notice {
@@ -175,13 +181,15 @@ body,
 .navbar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: var(--navbar-h);
+  /* BUG1 FIX: total height = base tab bar height + Android nav bar safe area */
+  height: calc(var(--navbar-h) + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: stretch;
   background: rgba(10, 10, 12, 0.97);
   border-top: 1px solid var(--panel-border);
   z-index: 1000;
+  /* Padding pushes tab buttons up above the gesture strip */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -600,9 +608,12 @@ body,
 .main-content {
   flex: 1;
   overflow: auto;
+  /* BUG2 FIX: prevent horizontal scroll */
+  overflow-x: hidden;
   padding: 16px;
   margin-top: 0;
-  margin-bottom: var(--navbar-h);
+  /* BUG1 FIX: account for navbar height + Android nav bar safe area */
+  margin-bottom: calc(var(--navbar-h) + env(safe-area-inset-bottom, 0px));
   will-change: scroll-position;
 }
 
@@ -1027,6 +1038,8 @@ body.controller-mode {
   margin: 0 auto;
   gap: 16px;
   overflow: hidden;
+  /* BUG2 FIX */
+  overflow-x: hidden;
 }
 
 /* Toolbar: tabs | search | count */
@@ -1035,6 +1048,9 @@ body.controller-mode {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  /* BUG2 FIX: prevent toolbar from overflowing on narrow screens */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .home-tabs {
@@ -1097,7 +1113,6 @@ body.controller-mode {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  padding-right: 2px;
   will-change: scroll-position;
 }
 
@@ -1255,20 +1270,35 @@ body.controller-mode {
   display: flex; flex-direction: column;
   height: 100%; max-width: 1600px;
   margin: 0 auto; gap: 16px; overflow: hidden;
+  /* BUG2 FIX */
+  overflow-x: hidden;
 }
 
 .library-toolbar {
   display: flex; align-items: center; gap: 12px;
   flex-shrink: 0;
+  /* BUG2 FIX */
+  min-width: 0;
+  overflow: hidden;
 }
 .library-title {
   display: flex; align-items: center; gap: 8px;
+  /* BUG2 FIX: hide title on narrow phones - tab bar already labels the page */
+  flex-shrink: 0;
 }
 .library-title-icon { color: var(--accent); flex-shrink: 0; }
 .library-title h1 { font-size: 1.1rem; font-weight: 700; margin: 0; white-space: nowrap; }
 
+@media (max-width: 480px) {
+  .library-title {
+    display: none;
+  }
+}
+
 .library-search {
   flex: 1; position: relative; max-width: 340px;
+  /* BUG2 FIX: allow search to shrink on narrow screens */
+  min-width: 0;
 }
 .library-search-icon {
   position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
@@ -1276,6 +1306,8 @@ body.controller-mode {
 }
 .library-search-input {
   width: 100%;
+  /* BUG2 FIX: prevent input from overflowing its container */
+  min-width: 0;
   padding: 7px 12px 7px 34px;
   border-radius: var(--r-sm);
   border: 1px solid var(--panel-border);
@@ -1293,7 +1325,7 @@ body.controller-mode {
 }
 
 .library-grid-area {
-  flex: 1; overflow-y: auto; min-height: 0; padding-right: 2px;
+  flex: 1; overflow-y: auto; min-height: 0;
   will-change: scroll-position;
 }
 
@@ -1325,6 +1357,9 @@ body.controller-mode {
   max-width: 760px;
   margin: 0 auto;
   display: flex; flex-direction: column; gap: 18px;
+  /* BUG2 FIX */
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* Profile card */
