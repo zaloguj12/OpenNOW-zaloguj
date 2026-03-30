@@ -9,6 +9,7 @@ Redesign the app UI to match an Instagram-style bottom tab bar with:
 - 2 games per row in both Catalog and Library
 - User profile/logout moved from top navbar into Settings page
 
+
 CHANGES MADE
 ------------
 

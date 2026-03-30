@@ -1,4 +1,4 @@
-import { Globe, Save, Check, Search, X, Loader, Zap, Mic, User, LogOut } from "lucide-react";
+import { Globe, Save, Check, Loader, Zap, Mic, User, LogOut } from "lucide-react";
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type { JSX } from "react";
 
@@ -447,8 +447,58 @@ function getTierDisplay(tier: string): { label: string; className: string } {
 export function SettingsPage({ settings, regions, onSettingChange, user, subscription, onLogout }: SettingsPageProps): JSX.Element {
   const tierInfo = user ? getTierDisplay(user.membershipTier) : null;
   const [savedIndicator, setSavedIndicator] = useState(false);
-  const [regionSearch, setRegionSearch] = useState("");
   const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
+
+  // -- Region ping state --
+  // pingMs: url -> number (ms) | null (measuring) | undefined (not started)
+  const [pingMs, setPingMs] = useState<Record<string, number | null>>({});
+  const [pinging, setPinging] = useState(false);
+
+  const runPing = useCallback(async () => {
+    if (regions.length === 0) return;
+    setPinging(true);
+
+    // Mark all as measuring (null)
+    const initial: Record<string, number | null> = {};
+    for (const r of regions) initial[r.url] = null;
+    setPingMs(initial);
+
+    try {
+      // Call native Kotlin pingRegions -- OkHttp fires real TCP connects,
+      // no WebView CORS shortcuts. All pings run in parallel on the native side.
+      const cap = (window as any).Capacitor;
+      if (!cap) throw new Error("no capacitor");
+      const urls = regions.map((r) => r.url);
+      let result: { results: Record<string, number> };
+      if (cap.nativePromise) {
+        result = await cap.nativePromise("GfnPlugin", "pingRegions", { urls });
+      } else {
+        result = await cap.Plugins.GfnPlugin.pingRegions({ urls });
+      }
+      // Kotlin sends ms values as strings to avoid JSObject overload ambiguity -- parse back
+      const parsed: Record<string, number> = {};
+      for (const [url, val_] of Object.entries(result.results)) {
+        parsed[url] = typeof val_ === "number" ? val_ : parseInt(val_ as string, 10);
+      }
+      setPingMs(parsed);
+    } catch (err) {
+      console.error("[pingRegions] native call failed:", err);
+      // Fall back: mark all as unreachable
+      const failed: Record<string, number> = {};
+      for (const r of regions) failed[r.url] = -1;
+      setPingMs(failed);
+    } finally {
+      setPinging(false);
+    }
+  }, [regions]);
+
+  // Auto-run once when regions first load
+  const pingAutoRanRef = useRef(false);
+  useEffect(() => {
+    if (pingAutoRanRef.current || regions.length === 0) return;
+    pingAutoRanRef.current = true;
+    void runPing();
+  }, [regions, runPing]);
 
   // Codec diagnostics
   const initialCodecResults = useMemo(() => loadStoredCodecResults(), []);
@@ -642,12 +692,6 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
     enumerateDevices();
     return () => { cancelled = true; };
   }, [settings.microphoneMode]);
-
-  const filteredRegions = useMemo(() => {
-    if (!regionSearch.trim()) return regions;
-    const q = regionSearch.trim().toLowerCase();
-    return regions.filter((r) => r.name.toLowerCase().includes(q));
-  }, [regions, regionSearch]);
 
   const selectedRegionName = useMemo(() => {
     if (!settings.region) return "Auto (Best)";
@@ -1346,9 +1390,17 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
         <section className="settings-section">
           <div className="settings-section-header">
             <h2>Region</h2>
+            <button
+              className="region-ping-btn"
+              onClick={() => void runPing()}
+              disabled={pinging}
+              type="button"
+            >
+              {pinging ? <Loader size={13} className="settings-loading-icon" /> : null}
+              {pinging ? "Pinging..." : "Retest Ping"}
+            </button>
           </div>
           <div className="settings-rows">
-            {/* Region selector with search */}
             <div className="region-selector">
               <button
                 className={`region-selected ${regionDropdownOpen ? "open" : ""}`}
@@ -1363,30 +1415,12 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
 
               {regionDropdownOpen && (
                 <div className="region-dropdown">
-                  <div className="region-dropdown-search">
-                    <Search size={14} className="region-dropdown-search-icon" />
-                    <input
-                      type="text"
-                      className="region-dropdown-search-input"
-                      placeholder="Search regions..."
-                      value={regionSearch}
-                      onChange={(e) => setRegionSearch(e.target.value)}
-                      autoFocus
-                    />
-                    {regionSearch && (
-                      <button className="region-dropdown-clear" onClick={() => setRegionSearch("")} type="button">
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-
                   <div className="region-dropdown-list">
                     <button
                       className={`region-dropdown-item ${!settings.region ? "active" : ""}`}
                       onClick={() => {
                         handleChange("region", "");
                         setRegionDropdownOpen(false);
-                        setRegionSearch("");
                       }}
                       type="button"
                     >
@@ -1395,26 +1429,35 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
                       {!settings.region && <Check size={14} className="region-check" />}
                     </button>
 
-                    {filteredRegions.map((region) => (
-                      <button
-                        key={region.url}
-                        className={`region-dropdown-item ${settings.region === region.url ? "active" : ""}`}
-                        onClick={() => {
-                          handleChange("region", region.url);
-                          setRegionDropdownOpen(false);
-                          setRegionSearch("");
-                        }}
-                        type="button"
-                      >
-                        <Globe size={14} />
-                        <span>{region.name}</span>
-                        {settings.region === region.url && <Check size={14} className="region-check" />}
-                      </button>
-                    ))}
-
-                    {filteredRegions.length === 0 && regions.length > 0 && (
-                      <div className="region-dropdown-empty">No regions match &ldquo;{regionSearch}&rdquo;</div>
-                    )}
+                    {regions.map((region) => {
+                      const ping = pingMs[region.url];
+                      return (
+                        <button
+                          key={region.url}
+                          className={`region-dropdown-item ${settings.region === region.url ? "active" : ""}`}
+                          onClick={() => {
+                            handleChange("region", region.url);
+                            setRegionDropdownOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <Globe size={14} />
+                          <span>{region.name}</span>
+                          <span className={`region-ping ${
+                            ping === undefined || ping === null ? "region-ping--measuring" :
+                            ping === -1 ? "region-ping--unreachable" :
+                            ping < 80 ? "region-ping--good" :
+                            ping < 150 ? "region-ping--ok" :
+                            "region-ping--bad"
+                          }`}>
+                            {ping === undefined || ping === null ? "..." :
+                             ping === -1 ? "--" :
+                             `${ping}ms`}
+                          </span>
+                          {settings.region === region.url && <Check size={14} className="region-check" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

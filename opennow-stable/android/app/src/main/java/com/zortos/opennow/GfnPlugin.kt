@@ -393,11 +393,10 @@ class GfnPlugin : Plugin() {
             val arr = com.getcapacitor.JSArray()
             var parsed = false
             if (body != null) {
+                android.util.Log.d("GfnPlugin", "serviceUrls raw response: $body")
                 try {
                     val root = JSONObject(body)
-                    val endpoints = root
-                        .optJSONObject("gfnServiceInfo")
-                        ?.optJSONArray("gfnServiceEndpoints")
+                    val endpoints = root.optJSONObject("gfnServiceInfo")?.optJSONArray("gfnServiceEndpoints")
                     if (endpoints != null) {
                         for (i in 0 until endpoints.length()) {
                             val ep = endpoints.getJSONObject(i)
@@ -415,15 +414,34 @@ class GfnPlugin : Plugin() {
                     android.util.Log.w("GfnPlugin", "getLoginProviders parse failed: ${e.message}")
                 }
             }
-            // Fall back to hardcoded default if fetch/parse failed
+            // Fallback: hardcoded from live pcs.geforcenow.com/v1/serviceUrls response (2026-03-02)
             if (!parsed) {
-                arr.put(JSObject().also {
-                    it.put("idpId", "PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg")
-                    it.put("code", "NVIDIA")
-                    it.put("displayName", "NVIDIA")
-                    it.put("streamingServiceUrl", "https://prod.cloudmatchbeta.nvidiagrid.net/")
-                    it.put("priority", 1)
-                })
+                data class P(val idpId: String, val code: String, val name: String, val url: String, val priority: Int)
+                val fallback = listOf(
+                    P("PDiAhv2kJTFeQ7WOPqiQ2tRZ7lGhR2X11dXvM4TZSxg", "NVIDIA", "NVIDIA",           "https://prod.cloudmatchbeta.nvidiagrid.net/",         1),
+                    P("Q1qniNEW0JjufNnXEqzjTONfWoEYAvTdsg5mBRsEork",  "KDD",    "au",               "https://prod.kdd.geforcenow.nvidiagrid.net/",          5),
+                    P("e2SnCkOjoqZiiDRhjSDVv0xzWjJ28vntfo933yWSKx4",  "TWM",    "Taiwan Mobile",    "https://prod.twm.geforcenow.nvidiagrid.net/",          6),
+                    P("UPWx8p5zwVUqGXorNji6qCzocVGDNWN7rqmPexEvedY",  "ZAI",    "Zain",             "https://prod.zai.geforcenow.nvidiagrid.net/",          7),
+                    P("pC8KYgDzm2TMgkPO1YlOSj8PjhT57JIbdlwDfFZNZFA",  "TKC",    "GAME+",            "https://prod.tkc.geforcenow.nvidiagrid.net/",          8),
+                    P("QwbAt7Fqmb5vmdOCuXtIlAF3YOACR4rot7xirVFlnkE",  "STR",    "StarHub",          "https://prod.str.geforcenow.nvidiagrid.net/",          9),
+                    P("IsvVBA3Aj8KZ7gwwuRUhB6-tOF2o2F1wncD-XjYv100",  "DIG",    "Digevo",           "https://prod.DIG.geforcenow.nvidiagrid.net/",         10),
+                    P("HVmQH98-CMT7FBuj_X3_QPmEYhJ-zzvFvM3mwmWwczw",  "ABY",    "ABYA",             "https://prod.aby.geforcenow.nvidiagrid.net/",         11),
+                    P("SBcX86bSGvOo6kgTpV_dRtqSs_3uU0hsK3r1JZGQElo",  "PNT",    "Cloud.GG",         "https://prod.pnt.geforcenow.nvidiagrid.net/",         12),
+                    P("4880Rhf61Q-Mab81qdnnVBFxF1LtOlrgxlaqvnI5Xis",  "YES",    "YES",              "https://prod.yes.geforcenow.nvidiagrid.net/",         15),
+                    P("z6t8yLbASocZyaERyRoWvr4cm3P2lN7qZgqNqmPpJOs",  "GCS",    "GFN.AM",           "https://am-west.gcs.geforcenow.nvidiagrid.net/",      16),
+                    P("XE399GXVdFM_XtGGQU1OcSxi1GVp0kRnOtq3wkTcOag",  "RAN",    "rain",             "https://prod.RAN.geforcenow.nvidiagrid.net/",         17),
+                    P("Kglwxcypk1jzx0tv1r8fVjOIRfXwKMtE0cgoJ3gmXv4",  "GKR",    "GFN Korea",        "https://prod.gkr.geforcenow.nvidiagrid.net/",         18),
+                    P("Q0g4IWPZrHIiXS2nh3I5fg59Aq09xhtd5xjd19nhJJM",  "BPC",    "Brothers Pictures", "https://prod.BPC.geforcenow.nvidiagrid.net/",        19),
+                )
+                for (p in fallback) {
+                    arr.put(JSObject().also {
+                        it.put("idpId", p.idpId)
+                        it.put("code", p.code)
+                        it.put("displayName", p.name)
+                        it.put("streamingServiceUrl", p.url)
+                        it.put("priority", p.priority)
+                    })
+                }
             }
             JSObject().also { it.put("providers", arr) }
         })
@@ -1161,6 +1179,57 @@ class GfnPlugin : Plugin() {
             (activity as? MainActivity)?.applyOrientation(mode)
         }
         call.resolve()
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Region ping
+    // ──────────────────────────────────────────────────────────────
+
+    @PluginMethod
+    fun pingRegions(call: PluginCall) {
+        val urlsArray = call.getArray("urls") ?: run { call.reject("Missing urls"); return }
+        val urls = mutableListOf<String>()
+        for (i in 0 until urlsArray.length()) {
+            urls.add(urlsArray.getString(i))
+        }
+
+        // Use a CountDownLatch + plain threads -- no async/await imports needed.
+        // All pings fire in parallel, latch waits for all to finish.
+        scope.launch {
+            val latch = java.util.concurrent.CountDownLatch(urls.size)
+            val resultsMap = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+            for (url in urls) {
+                Thread {
+                    val start = System.currentTimeMillis()
+                    try {
+                        // Raw TCP connect to port 443 -- no TLS handshake, just measures
+                        // network round trip time. Much closer to in-game UDP latency
+                        // than a full HTTPS request which adds 200-300ms of TLS overhead.
+                        val socket = java.net.Socket()
+                        socket.connect(java.net.InetSocketAddress(url, 443), 5000)
+                        socket.close()
+                    } catch (e: Exception) {
+                        // Connection refused or timeout -- elapsed still valid for timeout case
+                    }
+                    val elapsed = (System.currentTimeMillis() - start).toInt()
+                    val ms = if (elapsed < 5 || elapsed >= 4900) -1 else elapsed
+                    resultsMap[url] = ms
+                    latch.countDown()
+                }.start()
+            }
+
+            // Wait up to 6 seconds for all threads
+            latch.await(6, java.util.concurrent.TimeUnit.SECONDS)
+
+            val results = JSObject()
+            for ((url, ms) in resultsMap) {
+                results.put(url, ms.toString())
+            }
+            val out = JSObject()
+            out.put("results", results)
+            call.resolve(out)
+        }
     }
 
     @PluginMethod

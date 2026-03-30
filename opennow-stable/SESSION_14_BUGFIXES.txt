@@ -8,6 +8,7 @@ TEST DEVICE: Xiaomi Redmi Note 14 (non-5G)
   OS: Android 14, HyperOS
   Chip: MediaTek Helio G99-Ultra
 
+
 BUILD COMMANDS
 --------------
 cd D:\Projects\gfnclient\OpenNOW\opennow-stable

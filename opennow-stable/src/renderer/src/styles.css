@@ -1870,6 +1870,60 @@ body.controller-mode {
   font-size: 0.9rem; color: var(--ink-muted);
 }
 
+/* Region ping retest button */
+.region-ping-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border-solid);
+  background: var(--bg-a);
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.region-ping-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: rgba(88, 217, 138, 0.35);
+  background: var(--accent-surface);
+}
+.region-ping-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Region ping badge */
+.region-ping {
+  margin-left: auto;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  min-width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.region-ping--measuring {
+  color: var(--ink-muted);
+}
+.region-ping--good {
+  color: var(--accent);
+}
+.region-ping--ok {
+  color: var(--warning);
+}
+.region-ping--bad {
+  color: var(--error);
+}
+.region-ping--unreachable {
+  color: var(--ink-muted);
+}
+
 /* Footer */
 .settings-footer {
   display: flex; justify-content: flex-end;
@@ -2229,6 +2283,58 @@ body.controller-mode {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Collapsed state -- shrinks panel to just the toggle button */
+.sv-stats--collapsed {
+  min-width: unset;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+}
+
+/* Toggle button -- always visible, sits at top of panel */
+.sv-stats-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: rgba(10, 10, 12, 0.88);
+  border: 1px solid var(--panel-border);
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+.sv-stats-toggle:hover {
+  color: var(--ink);
+  background: rgba(20, 20, 24, 0.96);
+  border-color: rgba(255,255,255,0.12);
+}
+.sv-stats-toggle-rtt {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-size: 0.72rem;
+  flex: 1;
+  text-align: left;
+}
+.sv-stats-toggle-arrow {
+  font-size: 0.7rem;
+  transition: transform var(--t-fast);
+  display: inline-block;
+  transform: rotate(0deg);
+}
+.sv-stats-toggle-arrow.is-collapsed {
+  transform: rotate(180deg);
 }
 
 /* Controller indicator */

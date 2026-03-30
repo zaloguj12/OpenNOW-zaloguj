@@ -121,6 +121,7 @@ export function StreamView({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHints, setShowHints] = useState(true);
   const [showSessionClock, setShowSessionClock] = useState(false);
+  const [statsCollapsed, setStatsCollapsed] = useState(false);
 
   // Microphone state
   const micState = stats.micState ?? "uninitialized";
@@ -296,57 +297,76 @@ export function StreamView({
         </div>
       )}
 
-      {/* Stats HUD (top-right) */}
+      {/* Stats HUD (top-right, collapsible) */}
       {showStats && !isConnecting && (
-        <div className="sv-stats">
-          <div className="sv-stats-head">
-            {hasResolution ? (
-              <span className="sv-stats-primary">{stats.resolution} · {stats.decodeFps}fps</span>
-            ) : (
-              <span className="sv-stats-primary sv-stats-wait">Connecting...</span>
-            )}
-            <span className={`sv-stats-live ${inputLive ? "is-live" : "is-pending"}`}>
-              {inputLive ? "Live" : "Sync"}
+        <div className={`sv-stats${statsCollapsed ? " sv-stats--collapsed" : ""}`}>
+          {/* Toggle arrow tab */}
+          <button
+            type="button"
+            className="sv-stats-toggle"
+            onClick={() => setStatsCollapsed((c) => !c)}
+            title={statsCollapsed ? "Expand stats" : "Collapse stats"}
+            aria-label={statsCollapsed ? "Expand stats" : "Collapse stats"}
+          >
+            <span className="sv-stats-toggle-rtt">
+              {stats.rttMs > 0 ? `${stats.rttMs.toFixed(0)}ms` : "--"}
             </span>
-          </div>
+            <span className={`sv-stats-toggle-arrow${statsCollapsed ? " is-collapsed" : ""}`}>&#x276E;</span>
+          </button>
 
-          <div className="sv-stats-sub">
-            <span className="sv-stats-sub-left">
-              {hasCodec ? stats.codec : "N/A"}
-              {stats.isHdr && <span className="sv-stats-hdr">HDR</span>}
-            </span>
-            <span className="sv-stats-sub-right">{bitrateMbps} Mbps</span>
-          </div>
+          {/* Expanded content */}
+          {!statsCollapsed && (
+            <>
+              <div className="sv-stats-head">
+                {hasResolution ? (
+                  <span className="sv-stats-primary">{stats.resolution} · {stats.decodeFps}fps</span>
+                ) : (
+                  <span className="sv-stats-primary sv-stats-wait">Connecting...</span>
+                )}
+                <span className={`sv-stats-live ${inputLive ? "is-live" : "is-pending"}`}>
+                  {inputLive ? "Live" : "Sync"}
+                </span>
+              </div>
 
-          <div className="sv-stats-metrics">
-            <span className="sv-stats-chip" title="Round-trip network latency">
-              RTT <span className="sv-stats-chip-val" style={{ color: getRttColor(stats.rttMs) }}>{stats.rttMs > 0 ? `${stats.rttMs.toFixed(0)}ms` : "--"}</span>
-            </span>
-            <span className="sv-stats-chip" title="D = decode time">
-              D <span className="sv-stats-chip-val" style={{ color: decodeColor }}>{dText}</span>
-            </span>
-            <span className="sv-stats-chip" title="R = render time">
-              R <span className="sv-stats-chip-val" style={{ color: renderColor }}>{rText}</span>
-            </span>
-            <span className="sv-stats-chip" title="JB = jitter buffer delay">
-              JB <span className="sv-stats-chip-val" style={{ color: jitterBufferColor }}>{jbText}</span>
-            </span>
-            <span className="sv-stats-chip" title="Packet loss percentage">
-              Loss <span className="sv-stats-chip-val" style={{ color: lossColor }}>{stats.packetLossPercent.toFixed(2)}%</span>
-            </span>
-            <span className="sv-stats-chip" title="Input queue pressure (buffered bytes and delayed flush)">
-              IQ <span className="sv-stats-chip-val" style={{ color: inputQueueColor }}>{inputQueueText}</span>
-            </span>
-          </div>
+              <div className="sv-stats-sub">
+                <span className="sv-stats-sub-left">
+                  {hasCodec ? stats.codec : "N/A"}
+                  {stats.isHdr && <span className="sv-stats-hdr">HDR</span>}
+                </span>
+                <span className="sv-stats-sub-right">{bitrateMbps} Mbps</span>
+              </div>
 
-          <div className="sv-stats-foot">
-            Input queue peak {(stats.inputQueuePeakBufferedBytes / 1024).toFixed(1)}KB · drops {stats.inputQueueDropCount} · sched {stats.inputQueueMaxSchedulingDelayMs.toFixed(1)}ms
-          </div>
+              <div className="sv-stats-metrics">
+                <span className="sv-stats-chip" title="Round-trip network latency">
+                  RTT <span className="sv-stats-chip-val" style={{ color: getRttColor(stats.rttMs) }}>{stats.rttMs > 0 ? `${stats.rttMs.toFixed(0)}ms` : "--"}</span>
+                </span>
+                <span className="sv-stats-chip" title="D = decode time">
+                  D <span className="sv-stats-chip-val" style={{ color: decodeColor }}>{dText}</span>
+                </span>
+                <span className="sv-stats-chip" title="R = render time">
+                  R <span className="sv-stats-chip-val" style={{ color: renderColor }}>{rText}</span>
+                </span>
+                <span className="sv-stats-chip" title="JB = jitter buffer delay">
+                  JB <span className="sv-stats-chip-val" style={{ color: jitterBufferColor }}>{jbText}</span>
+                </span>
+                <span className="sv-stats-chip" title="Packet loss percentage">
+                  Loss <span className="sv-stats-chip-val" style={{ color: lossColor }}>{stats.packetLossPercent.toFixed(2)}%</span>
+                </span>
+                <span className="sv-stats-chip" title="Input queue pressure (buffered bytes and delayed flush)">
+                  IQ <span className="sv-stats-chip-val" style={{ color: inputQueueColor }}>{inputQueueText}</span>
+                </span>
+              </div>
 
-          {(stats.gpuType || regionLabel) && (
-            <div className="sv-stats-foot">
-              {[stats.gpuType, regionLabel].filter(Boolean).join(" · ")}
-            </div>
+              <div className="sv-stats-foot">
+                Input queue peak {(stats.inputQueuePeakBufferedBytes / 1024).toFixed(1)}KB · drops {stats.inputQueueDropCount} · sched {stats.inputQueueMaxSchedulingDelayMs.toFixed(1)}ms
+              </div>
+
+              {(stats.gpuType || regionLabel) && (
+                <div className="sv-stats-foot">
+                  {[stats.gpuType, regionLabel].filter(Boolean).join(" · ")}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

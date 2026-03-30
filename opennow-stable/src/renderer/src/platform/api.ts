@@ -175,6 +175,8 @@ function buildCapacitorApi(): OpenNowApi {
       ),
     setSetting: (key, value) => callNativePlugin("setSetting", { key, value }),
     resetSettings: () => callNativePlugin("resetSettings"),
+    pingRegions: (urls: string[]) =>
+      callNativePlugin<{ results: Record<string, number> }>("pingRegions", { urls }),
   };
 }
 
