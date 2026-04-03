@@ -1,5 +1,48 @@
-node_modules
-dist
-dist-electron
-dist-release
+# ── Node ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Build output ───────────────────────────────────────
+dist/
+dist-electron/
+dist-release/
+out/
+
+# ── Android build cache ────────────────────────────────
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
+android/build/reports/
+
+# ── Capacitor generated (sync'd from npm build) ────────
+android/app/src/main/assets/public/
+
+# ── Gradle wrapper (optional, keep if you want offline) -
+# android/gradle/
+# android/gradlew
+# android/gradlew.bat
+
+# ── Signing / secrets ──────────────────────────────────
+*.jks
+*.keystore
+keystore.properties
+
+# ── IDE ────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# ── OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Misc ───────────────────────────────────────────────
 *.log
+.env
+.env.local
