@@ -291,6 +291,12 @@ export function App(): JSX.Element {
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
     windowHeight: 900,
+    touchGamepadLeftOffsetX: 0,
+    touchGamepadLeftOffsetY: 0,
+    touchGamepadCenterOffsetX: 0,
+    touchGamepadCenterOffsetY: 0,
+    touchGamepadRightOffsetX: 0,
+    touchGamepadRightOffsetY: 0,
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
@@ -317,6 +323,7 @@ export function App(): JSX.Element {
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
   const [streamWarning, setStreamWarning] = useState<StreamWarningState | null>(null);
   const [touchGamepadHidden, setTouchGamepadHidden] = useState(false);
+  const [touchGamepadEditMode, setTouchGamepadEditMode] = useState(false);
 
   const handleControllerPageNavigate = useCallback((direction: "prev" | "next"): void => {
     if (!authSession || streamStatus !== "idle") {
@@ -847,6 +854,49 @@ export function App(): JSX.Element {
     setSettings((prev) => ({ ...prev, [key]: value }));
     if (settingsLoaded) {
       await getPlatformApi().setSetting(key, value);
+    }
+  }, [settingsLoaded]);
+
+  // Handle touch gamepad layout changes
+  const handleTouchGamepadLayoutChange = useCallback(
+    (cluster: "left" | "center" | "right", deltaX: number, deltaY: number) => {
+      setSettings((prev) => {
+        const keyX = `touchGamepad${cluster.charAt(0).toUpperCase() + cluster.slice(1)}OffsetX` as keyof Settings;
+        const keyY = `touchGamepad${cluster.charAt(0).toUpperCase() + cluster.slice(1)}OffsetY` as keyof Settings;
+        const newX = (prev[keyX] as number) + deltaX;
+        const newY = (prev[keyY] as number) + deltaY;
+        
+        if (settingsLoaded) {
+          getPlatformApi().setSetting(keyX, newX as Settings[typeof keyX]);
+          getPlatformApi().setSetting(keyY, newY as Settings[typeof keyY]);
+        }
+        
+        return {
+          ...prev,
+          [keyX]: newX,
+          [keyY]: newY,
+        };
+      });
+    },
+    [settingsLoaded]
+  );
+
+  const resetTouchGamepadLayout = useCallback(async () => {
+    const resetValues = {
+      touchGamepadLeftOffsetX: 0,
+      touchGamepadLeftOffsetY: 0,
+      touchGamepadCenterOffsetX: 0,
+      touchGamepadCenterOffsetY: 0,
+      touchGamepadRightOffsetX: 0,
+      touchGamepadRightOffsetY: 0,
+    };
+    
+    setSettings((prev) => ({ ...prev, ...resetValues }));
+    
+    if (settingsLoaded) {
+      for (const [key, value] of Object.entries(resetValues)) {
+        await getPlatformApi().setSetting(key as keyof Settings, value as Settings[keyof Settings]);
+      }
     }
   }, [settingsLoaded]);
 
@@ -1564,10 +1614,27 @@ export function App(): JSX.Element {
             onToggleTouchGamepad={() => {
               setTouchGamepadHidden((hidden) => !hidden);
             }}
+            touchGamepadEditMode={touchGamepadEditMode}
+            onToggleTouchGamepadEditMode={() => {
+              setTouchGamepadEditMode((mode) => !mode);
+            }}
+            onResetTouchGamepadLayout={() => {
+              void resetTouchGamepadLayout();
+            }}
           >
             <TouchGamepad
               clientRef={clientRef}
               visible={shouldShowTouchGamepad && !touchGamepadHidden}
+              editMode={touchGamepadEditMode}
+              layoutOffsets={{
+                leftOffsetX: settings.touchGamepadLeftOffsetX,
+                leftOffsetY: settings.touchGamepadLeftOffsetY,
+                centerOffsetX: settings.touchGamepadCenterOffsetX,
+                centerOffsetY: settings.touchGamepadCenterOffsetY,
+                rightOffsetX: settings.touchGamepadRightOffsetX,
+                rightOffsetY: settings.touchGamepadRightOffsetY,
+              }}
+              onLayoutChange={handleTouchGamepadLayoutChange}
             />
           </StreamView>
         )}

@@ -1386,6 +1386,75 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
           </div>
         </section>
 
+        {/* ── Touch Controller (Android/Touch) ────────────── */}
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <h2>Touch Controller</h2>
+          </div>
+          <div className="settings-rows">
+            <div className="settings-row settings-row--column">
+              <div className="settings-row-top">
+                <label className="settings-label">
+                  Controller Layout
+                  <span className="settings-hint">
+                    Customize the on-screen controller position during an active stream. 
+                    Tap the move icon in the stream overlay to enter edit mode, then drag 
+                    the controller clusters to reposition them.
+                  </span>
+                </label>
+              </div>
+              <div className="settings-layout-info">
+                <div className="settings-layout-offset">
+                  <span>Left cluster:</span>
+                  <span className="settings-layout-value">
+                    {settings.touchGamepadLeftOffsetX === 0 && settings.touchGamepadLeftOffsetY === 0
+                      ? "Default"
+                      : `(${settings.touchGamepadLeftOffsetX}, ${settings.touchGamepadLeftOffsetY})`}
+                  </span>
+                </div>
+                <div className="settings-layout-offset">
+                  <span>Center cluster:</span>
+                  <span className="settings-layout-value">
+                    {settings.touchGamepadCenterOffsetX === 0 && settings.touchGamepadCenterOffsetY === 0
+                      ? "Default"
+                      : `(${settings.touchGamepadCenterOffsetX}, ${settings.touchGamepadCenterOffsetY})`}
+                  </span>
+                </div>
+                <div className="settings-layout-offset">
+                  <span>Right cluster:</span>
+                  <span className="settings-layout-value">
+                    {settings.touchGamepadRightOffsetX === 0 && settings.touchGamepadRightOffsetY === 0
+                      ? "Default"
+                      : `(${settings.touchGamepadRightOffsetX}, ${settings.touchGamepadRightOffsetY})`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="settings-layout-reset-btn"
+                  onClick={() => {
+                    handleChange("touchGamepadLeftOffsetX", 0);
+                    handleChange("touchGamepadLeftOffsetY", 0);
+                    handleChange("touchGamepadCenterOffsetX", 0);
+                    handleChange("touchGamepadCenterOffsetY", 0);
+                    handleChange("touchGamepadRightOffsetX", 0);
+                    handleChange("touchGamepadRightOffsetY", 0);
+                  }}
+                  disabled={
+                    settings.touchGamepadLeftOffsetX === 0 &&
+                    settings.touchGamepadLeftOffsetY === 0 &&
+                    settings.touchGamepadCenterOffsetX === 0 &&
+                    settings.touchGamepadCenterOffsetY === 0 &&
+                    settings.touchGamepadRightOffsetX === 0 &&
+                    settings.touchGamepadRightOffsetY === 0
+                  }
+                >
+                  Reset Layout
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── Region ────────────────────────────────────── */}
         <section className="settings-section">
           <div className="settings-section-header">
