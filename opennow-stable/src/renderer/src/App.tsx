@@ -3,7 +3,8 @@ import type { JSX } from "react";
 
 import { getPlatformApi } from "./platform/index";
 import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
-import { TouchGamepad } from "./components/TouchGamepad";
+import { TouchGamepad, parseLayout } from "./components/TouchGamepad";
+import type { GamepadElementId, GamepadLayout } from "./components/TouchGamepad";
 import { TouchInputHandler } from "./gfn/touchInput";
 
 import type {
@@ -291,12 +292,7 @@ export function App(): JSX.Element {
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
     windowHeight: 900,
-    touchGamepadLeftOffsetX: 0,
-    touchGamepadLeftOffsetY: 0,
-    touchGamepadCenterOffsetX: 0,
-    touchGamepadCenterOffsetY: 0,
-    touchGamepadRightOffsetX: 0,
-    touchGamepadRightOffsetY: 0,
+    touchGamepadLayout: "{}",
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
@@ -857,24 +853,23 @@ export function App(): JSX.Element {
     }
   }, [settingsLoaded]);
 
-  // Handle touch gamepad layout changes
-  const handleTouchGamepadLayoutChange = useCallback(
-    (cluster: "left" | "center" | "right", deltaX: number, deltaY: number) => {
+  // Handle touch gamepad per-element layout changes
+  const touchGamepadLayout: GamepadLayout = useMemo(() => parseLayout(settings.touchGamepadLayout), [settings.touchGamepadLayout]);
+
+  const handleTouchGamepadElementDrag = useCallback(
+    (id: GamepadElementId, x: number, y: number) => {
       setSettings((prev) => {
-        const keyX = `touchGamepad${cluster.charAt(0).toUpperCase() + cluster.slice(1)}OffsetX` as keyof Settings;
-        const keyY = `touchGamepad${cluster.charAt(0).toUpperCase() + cluster.slice(1)}OffsetY` as keyof Settings;
-        const newX = (prev[keyX] as number) + deltaX;
-        const newY = (prev[keyY] as number) + deltaY;
-        
+        const currentLayout = parseLayout(prev.touchGamepadLayout);
+        const nextLayout = { ...currentLayout, [id]: { x, y } };
+        const nextJson = JSON.stringify(nextLayout);
+
         if (settingsLoaded) {
-          getPlatformApi().setSetting(keyX, newX as Settings[typeof keyX]);
-          getPlatformApi().setSetting(keyY, newY as Settings[typeof keyY]);
+          getPlatformApi().setSetting("touchGamepadLayout", nextJson);
         }
-        
+
         return {
           ...prev,
-          [keyX]: newX,
-          [keyY]: newY,
+          touchGamepadLayout: nextJson,
         };
       });
     },
@@ -882,21 +877,9 @@ export function App(): JSX.Element {
   );
 
   const resetTouchGamepadLayout = useCallback(async () => {
-    const resetValues = {
-      touchGamepadLeftOffsetX: 0,
-      touchGamepadLeftOffsetY: 0,
-      touchGamepadCenterOffsetX: 0,
-      touchGamepadCenterOffsetY: 0,
-      touchGamepadRightOffsetX: 0,
-      touchGamepadRightOffsetY: 0,
-    };
-    
-    setSettings((prev) => ({ ...prev, ...resetValues }));
-    
+    setSettings((prev) => ({ ...prev, touchGamepadLayout: "{}" }));
     if (settingsLoaded) {
-      for (const [key, value] of Object.entries(resetValues)) {
-        await getPlatformApi().setSetting(key as keyof Settings, value as Settings[keyof Settings]);
-      }
+      await getPlatformApi().setSetting("touchGamepadLayout", "{}");
     }
   }, [settingsLoaded]);
 
@@ -1626,15 +1609,8 @@ export function App(): JSX.Element {
               clientRef={clientRef}
               visible={shouldShowTouchGamepad && !touchGamepadHidden}
               editMode={touchGamepadEditMode}
-              layoutOffsets={{
-                leftOffsetX: settings.touchGamepadLeftOffsetX,
-                leftOffsetY: settings.touchGamepadLeftOffsetY,
-                centerOffsetX: settings.touchGamepadCenterOffsetX,
-                centerOffsetY: settings.touchGamepadCenterOffsetY,
-                rightOffsetX: settings.touchGamepadRightOffsetX,
-                rightOffsetY: settings.touchGamepadRightOffsetY,
-              }}
-              onLayoutChange={handleTouchGamepadLayoutChange}
+              layout={touchGamepadLayout}
+              onElementDrag={handleTouchGamepadElementDrag}
             />
           </StreamView>
         )}

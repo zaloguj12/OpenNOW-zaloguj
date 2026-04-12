@@ -2874,52 +2874,15 @@ body.controller-mode {
   inset: 0;
   pointer-events: none;
   z-index: 2;
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  padding: 14px 12px 22px;
-  gap: 0;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* Left and right halves */
-.tgp-side {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
+/* Per-element absolute positioning wrapper */
+.tgp-element {
+  position: absolute;
   pointer-events: auto;
-}
-.tgp-side--right {
-  align-items: flex-end;
-}
-
-/* Shoulder/trigger buttons row */
-.tgp-shoulders {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
-}
-
-/* Lower left: D-pad + left stick · Lower right: right stick + face buttons */
-.tgp-lower-left,
-.tgp-lower-right {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: 14px;
-}
-
-/* Centre cluster (Back + Start) */
-.tgp-centre-cluster {
-  display: flex;
-  flex-direction: row;
-  gap: 14px;
-  align-self: flex-end;
-  padding-bottom: 40px;
-  pointer-events: auto;
+  touch-action: none;
 }
 
 /* ---------- Shoulder / Trigger button ---------- */
@@ -3136,21 +3099,8 @@ body.controller-mode {
   border-width: 1.5px;
 }
 
-/* ---------- Face buttons (A B X Y) ---------- */
-.tgp-face {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-/* -9px overlap: circles visually separate despite bounding-box overlap */
-.tgp-face > * + * {
-  margin-top: -9px;
-}
-.tgp-face-row {
-  display: flex;
-  flex-direction: row;
-  gap: 26px;
-}
+/* ---------- Face buttons (A B X Y) ----------
+   Now individually positioned; .tgp-face / .tgp-face-row wrappers removed */
 .tgp-face-btn {
   width: 48px;
   height: 48px;
@@ -3182,39 +3132,36 @@ body.controller-mode {
 /* Edit mode overlay styling */
 .tgp--editing {
   background: rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
 }
 
-/* Cluster wrapper for draggable positioning */
-.tgp-cluster {
-  position: relative;
-  will-change: transform;
-  transition: transform 0.05s ease-out;
-}
-
-/* Editing mode styling for clusters */
-.tgp-cluster--editing {
+/* Per-element editing styling */
+.tgp-element--editing {
   outline: 2px dashed var(--accent);
-  outline-offset: 8px;
-  border-radius: 12px;
+  outline-offset: 4px;
+  border-radius: 8px;
   background: rgba(118, 169, 250, 0.08);
   transition: outline-color 0.15s, background 0.15s;
+  cursor: grab;
+  z-index: 10;
 }
 
-.tgp-cluster--editing:active {
+.tgp-element--editing:active {
   outline-color: var(--success);
   background: rgba(88, 217, 138, 0.12);
+  cursor: grabbing;
 }
 
-/* Cluster label shown in edit mode */
-.tgp-cluster-label {
+/* Element label shown in edit mode */
+.tgp-element-label {
   position: absolute;
-  top: -28px;
+  top: -22px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 3px 10px;
+  padding: 2px 8px;
   background: var(--accent);
   color: #000;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
   border-radius: 4px;

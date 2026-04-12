@@ -15,10 +15,9 @@
  * The component is invisible on desktop -- it only renders when the device
  * has a touch screen and the stream is active.
  *
- * Supports an edit mode for repositioning the three main clusters:
- *   - Left cluster (LT/LB + D-pad + left stick/L3)
- *   - Center cluster (Back/Start)
- *   - Right cluster (RB/RT + right stick/R3 + ABXY)
+ * Supports an edit mode where every element can be individually dragged
+ * to a custom position. Positions are stored as viewport percentages (vw/vh)
+ * so the layout scales correctly across different screen sizes.
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -32,26 +31,85 @@ import {
   GAMEPAD_START, GAMEPAD_BACK,
 } from "../gfn/inputProtocol";
 
-export interface TouchGamepadLayoutOffsets {
-  leftOffsetX: number;
-  leftOffsetY: number;
-  centerOffsetX: number;
-  centerOffsetY: number;
-  rightOffsetX: number;
-  rightOffsetY: number;
+// ─── Per-element layout system ───────────────────────────────────────────────
+
+/** Position of a single gamepad element in viewport percentages */
+export interface ElementPosition {
+  /** Left offset as % of viewport width (0–100) */
+  x: number;
+  /** Top offset as % of viewport height (0–100) */
+  y: number;
 }
+
+/** Full layout: element ID → position. Missing keys use defaults. */
+export type GamepadLayout = Record<string, ElementPosition>;
+
+/** All draggable element IDs */
+export type GamepadElementId =
+  | "lt" | "lb" | "dpad" | "lstick"
+  | "back" | "start"
+  | "rb" | "rt" | "rstick"
+  | "btn-y" | "btn-x" | "btn-b" | "btn-a";
+
+/** Default positions (viewport %) — matches the original flex layout */
+export const DEFAULT_POSITIONS: Record<GamepadElementId, ElementPosition> = {
+  lt:      { x: 1.4,  y: 3.5 },
+  lb:      { x: 9.3,  y: 3.5 },
+  dpad:    { x: 1.8,  y: 51.8 },
+  lstick:  { x: 18.1, y: 52.5 },
+  back:    { x: 43.5, y: 82 },
+  start:   { x: 50,   y: 82 },
+  rb:      { x: 83.7, y: 3.5 },
+  rt:      { x: 91.6, y: 3.5 },
+  rstick:  { x: 72.1, y: 52.5 },
+  "btn-y": { x: 88.6, y: 42.5 },
+  "btn-x": { x: 84.4, y: 55 },
+  "btn-b": { x: 93,   y: 55 },
+  "btn-a": { x: 88.8, y: 67.5 },
+};
+
+export const ALL_ELEMENT_IDS: GamepadElementId[] = [
+  "lt", "lb", "dpad", "lstick",
+  "back", "start",
+  "rb", "rt", "rstick",
+  "btn-y", "btn-x", "btn-b", "btn-a",
+];
+
+/** Parse the JSON layout string from settings, falling back to empty */
+export function parseLayout(json: string): GamepadLayout {
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as GamepadLayout;
+    }
+  } catch {
+    // invalid JSON — use defaults
+  }
+  return {};
+}
+
+/** Resolve element position: user override → default */
+function getPosition(layout: GamepadLayout, id: GamepadElementId): ElementPosition {
+  return layout[id] ?? DEFAULT_POSITIONS[id];
+}
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 interface Props {
   clientRef: React.RefObject<GfnWebRtcClient | null>;
   visible: boolean;
   editMode?: boolean;
-  layoutOffsets?: TouchGamepadLayoutOffsets;
-  onLayoutChange?: (cluster: "left" | "center" | "right", deltaX: number, deltaY: number) => void;
+  layout?: GamepadLayout;
+  onElementDrag?: (id: GamepadElementId, x: number, y: number) => void;
 }
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
 
 function clamp(v: number): number {
   return Math.max(-1, Math.min(1, v));
 }
+
+// ─── Sub-components (unchanged game input logic) ─────────────────────────────
 
 interface FaceButtonProps {
   label: string;
@@ -390,30 +448,31 @@ function CentreButton({ label, xinputFlag, clientRef, disabled }: CentreButtonPr
   );
 }
 
-interface DraggableClusterProps {
-  cluster: "left" | "center" | "right";
-  offsetX: number;
-  offsetY: number;
+// ─── DraggableElement — wraps a single element for edit-mode dragging ─────────
+
+interface DraggableElementProps {
+  id: GamepadElementId;
+  position: ElementPosition;
   editMode: boolean;
-  onDrag: (cluster: "left" | "center" | "right", deltaX: number, deltaY: number) => void;
+  onDrag: (id: GamepadElementId, x: number, y: number) => void;
   children: React.ReactNode;
-  className?: string;
+  label?: string;
 }
 
-function DraggableCluster({
-  cluster,
-  offsetX,
-  offsetY,
+function DraggableElement({
+  id,
+  position,
   editMode,
   onDrag,
   children,
-  className = "",
-}: DraggableClusterProps): JSX.Element {
+  label,
+}: DraggableElementProps): JSX.Element {
   const dragState = useRef<{ startX: number; startY: number; identifier: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!editMode) return;
     e.stopPropagation();
+    e.preventDefault();
     const touch = e.changedTouches[0];
     if (!touch) return;
     dragState.current = {
@@ -437,13 +496,19 @@ function DraggableCluster({
     }
     if (!foundTouch) return;
 
-    const deltaX = foundTouch.clientX - dragState.current.startX;
-    const deltaY = foundTouch.clientY - dragState.current.startY;
+    const deltaXpx = foundTouch.clientX - dragState.current.startX;
+    const deltaYpx = foundTouch.clientY - dragState.current.startY;
 
     dragState.current.startX = foundTouch.clientX;
     dragState.current.startY = foundTouch.clientY;
 
-    onDrag(cluster, deltaX, deltaY);
+    // Convert pixel deltas to viewport percentages
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const newX = Math.max(0, Math.min(100, position.x + (deltaXpx / vw) * 100));
+    const newY = Math.max(0, Math.min(100, position.y + (deltaYpx / vh) * 100));
+
+    onDrag(id, newX, newY);
   };
 
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -460,117 +525,140 @@ function DraggableCluster({
 
   return (
     <div
-      className={`tgp-cluster ${editMode ? "tgp-cluster--editing" : ""} ${className}`}
+      className={`tgp-element ${editMode ? "tgp-element--editing" : ""}`}
       style={{
-        transform: `translate(${offsetX}px, ${offsetY}px)`,
+        left: `${position.x}vw`,
+        top: `${position.y}vh`,
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {editMode && (
-        <div className="tgp-cluster-label">
-          {cluster === "left" ? "LEFT" : cluster === "center" ? "CENTER" : "RIGHT"}
-        </div>
+      {editMode && label && (
+        <div className="tgp-element-label">{label}</div>
       )}
       {children}
     </div>
   );
 }
 
+// ─── StickGroup — stick + L3/R3 button grouped together ──────────────────────
+
+function StickGroup({
+  side,
+  clientRef,
+  disabled,
+  xinputFlag,
+}: {
+  side: "left" | "right";
+  clientRef: React.RefObject<GfnWebRtcClient | null>;
+  disabled: boolean;
+  xinputFlag: number;
+}): JSX.Element {
+  return (
+    <div className="tgp-stick-group">
+      <Thumbstick side={side} clientRef={clientRef} disabled={disabled} />
+      <FaceButton
+        label={side === "left" ? "L3" : "R3"}
+        color="rgba(255,255,255,0.5)"
+        xinputFlag={xinputFlag}
+        clientRef={clientRef}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
+
 export function TouchGamepad({
   clientRef,
   visible,
   editMode = false,
-  layoutOffsets,
-  onLayoutChange,
+  layout = {},
+  onElementDrag,
 }: Props): JSX.Element | null {
   if (!visible) return null;
 
-  const offsets = layoutOffsets ?? {
-    leftOffsetX: 0,
-    leftOffsetY: 0,
-    centerOffsetX: 0,
-    centerOffsetY: 0,
-    rightOffsetX: 0,
-    rightOffsetY: 0,
-  };
-
   const handleDrag = useCallback(
-    (cluster: "left" | "center" | "right", deltaX: number, deltaY: number) => {
-      onLayoutChange?.(cluster, deltaX, deltaY);
+    (id: GamepadElementId, x: number, y: number) => {
+      onElementDrag?.(id, x, y);
     },
-    [onLayoutChange]
+    [onElementDrag]
   );
 
   const inputDisabled = editMode;
 
+  /** Get resolved position for an element */
+  const pos = (id: GamepadElementId) => getPosition(layout, id);
+
   return (
     <div className={`tgp ${editMode ? "tgp--editing" : ""}`}>
-      {/* Left side: shoulder + D-pad + left stick */}
-      <DraggableCluster
-        cluster="left"
-        offsetX={offsets.leftOffsetX}
-        offsetY={offsets.leftOffsetY}
-        editMode={editMode}
-        onDrag={handleDrag}
-        className="tgp-side tgp-side--left"
-      >
-        <div className="tgp-shoulders">
-          <TriggerButton label="LT" side="left" clientRef={clientRef} disabled={inputDisabled} />
-          <ShoulderButton label="LB" xinputFlag={GAMEPAD_LB} clientRef={clientRef} disabled={inputDisabled} />
-        </div>
-        <div className="tgp-lower-left">
-          <Dpad clientRef={clientRef} disabled={inputDisabled} />
-          <div className="tgp-stick-group">
-            <Thumbstick side="left" clientRef={clientRef} disabled={inputDisabled} />
-            <FaceButton label="L3" color="rgba(255,255,255,0.5)" xinputFlag={GAMEPAD_LS} clientRef={clientRef} disabled={inputDisabled} />
-          </div>
-        </div>
-      </DraggableCluster>
+      {/* LT */}
+      <DraggableElement id="lt" position={pos("lt")} editMode={editMode} onDrag={handleDrag} label="LT">
+        <TriggerButton label="LT" side="left" clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
 
-      {/* Centre: Back + Start */}
-      <DraggableCluster
-        cluster="center"
-        offsetX={offsets.centerOffsetX}
-        offsetY={offsets.centerOffsetY}
-        editMode={editMode}
-        onDrag={handleDrag}
-        className="tgp-centre-cluster"
-      >
+      {/* LB */}
+      <DraggableElement id="lb" position={pos("lb")} editMode={editMode} onDrag={handleDrag} label="LB">
+        <ShoulderButton label="LB" xinputFlag={GAMEPAD_LB} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* D-Pad */}
+      <DraggableElement id="dpad" position={pos("dpad")} editMode={editMode} onDrag={handleDrag} label="D-Pad">
+        <Dpad clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* Left Stick + L3 */}
+      <DraggableElement id="lstick" position={pos("lstick")} editMode={editMode} onDrag={handleDrag} label="L-Stick">
+        <StickGroup side="left" clientRef={clientRef} disabled={inputDisabled} xinputFlag={GAMEPAD_LS} />
+      </DraggableElement>
+
+      {/* Back */}
+      <DraggableElement id="back" position={pos("back")} editMode={editMode} onDrag={handleDrag} label="Back">
         <CentreButton label="&#9776;" xinputFlag={GAMEPAD_BACK} clientRef={clientRef} disabled={inputDisabled} />
-        <CentreButton label="&#9654;" xinputFlag={GAMEPAD_START} clientRef={clientRef} disabled={inputDisabled} />
-      </DraggableCluster>
+      </DraggableElement>
 
-      {/* Right side: shoulder + face buttons + right stick */}
-      <DraggableCluster
-        cluster="right"
-        offsetX={offsets.rightOffsetX}
-        offsetY={offsets.rightOffsetY}
-        editMode={editMode}
-        onDrag={handleDrag}
-        className="tgp-side tgp-side--right"
-      >
-        <div className="tgp-shoulders">
-          <ShoulderButton label="RB" xinputFlag={GAMEPAD_RB} clientRef={clientRef} disabled={inputDisabled} />
-          <TriggerButton label="RT" side="right" clientRef={clientRef} disabled={inputDisabled} />
-        </div>
-        <div className="tgp-lower-right">
-          <div className="tgp-stick-group">
-            <Thumbstick side="right" clientRef={clientRef} disabled={inputDisabled} />
-            <FaceButton label="R3" color="rgba(255,255,255,0.5)" xinputFlag={GAMEPAD_RS} clientRef={clientRef} disabled={inputDisabled} />
-          </div>
-          <div className="tgp-face">
-            <FaceButton label="Y" color="#f5c518" xinputFlag={GAMEPAD_Y} clientRef={clientRef} disabled={inputDisabled} />
-            <div className="tgp-face-row">
-              <FaceButton label="X" color="#5b9bd5" xinputFlag={GAMEPAD_X} clientRef={clientRef} disabled={inputDisabled} />
-              <FaceButton label="B" color="#e05c5c" xinputFlag={GAMEPAD_B} clientRef={clientRef} disabled={inputDisabled} />
-            </div>
-            <FaceButton label="A" color="#58d98a" xinputFlag={GAMEPAD_A} clientRef={clientRef} disabled={inputDisabled} />
-          </div>
-        </div>
-      </DraggableCluster>
+      {/* Start */}
+      <DraggableElement id="start" position={pos("start")} editMode={editMode} onDrag={handleDrag} label="Start">
+        <CentreButton label="&#9654;" xinputFlag={GAMEPAD_START} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* RB */}
+      <DraggableElement id="rb" position={pos("rb")} editMode={editMode} onDrag={handleDrag} label="RB">
+        <ShoulderButton label="RB" xinputFlag={GAMEPAD_RB} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* RT */}
+      <DraggableElement id="rt" position={pos("rt")} editMode={editMode} onDrag={handleDrag} label="RT">
+        <TriggerButton label="RT" side="right" clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* Right Stick + R3 */}
+      <DraggableElement id="rstick" position={pos("rstick")} editMode={editMode} onDrag={handleDrag} label="R-Stick">
+        <StickGroup side="right" clientRef={clientRef} disabled={inputDisabled} xinputFlag={GAMEPAD_RS} />
+      </DraggableElement>
+
+      {/* Y */}
+      <DraggableElement id="btn-y" position={pos("btn-y")} editMode={editMode} onDrag={handleDrag} label="Y">
+        <FaceButton label="Y" color="#f5c518" xinputFlag={GAMEPAD_Y} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* X */}
+      <DraggableElement id="btn-x" position={pos("btn-x")} editMode={editMode} onDrag={handleDrag} label="X">
+        <FaceButton label="X" color="#5b9bd5" xinputFlag={GAMEPAD_X} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* B */}
+      <DraggableElement id="btn-b" position={pos("btn-b")} editMode={editMode} onDrag={handleDrag} label="B">
+        <FaceButton label="B" color="#e05c5c" xinputFlag={GAMEPAD_B} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
+
+      {/* A */}
+      <DraggableElement id="btn-a" position={pos("btn-a")} editMode={editMode} onDrag={handleDrag} label="A">
+        <FaceButton label="A" color="#58d98a" xinputFlag={GAMEPAD_A} clientRef={clientRef} disabled={inputDisabled} />
+      </DraggableElement>
     </div>
   );
 }

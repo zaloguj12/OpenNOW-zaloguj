@@ -282,7 +282,7 @@ export function StreamView({
       {touchGamepadEditMode && !isConnecting && (
         <div className="sv-edit-banner">
           <Move size={16} />
-          <span>Drag to reposition controller clusters</span>
+          <span>Drag any button to reposition</span>
         </div>
       )}
 
