@@ -2875,7 +2875,7 @@ body.controller-mode {
   pointer-events: none;
   z-index: 2;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: space-between;
   padding: 14px 12px 22px;
   gap: 0;
@@ -2887,6 +2887,7 @@ body.controller-mode {
 .tgp-side {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
   pointer-events: auto;
