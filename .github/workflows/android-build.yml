@@ -73,7 +73,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # CI Signing: Decode keystore and set up signing environment
+      # CI Signing: Decode keystore from base64 secret and set up signing environment
       # If ANDROID_KEYSTORE_BASE64 secret is not configured, falls back to debug build
       - name: Setup CI signing
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
