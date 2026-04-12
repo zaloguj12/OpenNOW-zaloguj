@@ -3071,6 +3071,203 @@ body.controller-mode {
 }
 
 /* ======================================================
+   TOUCH GAMEPAD EDIT MODE
+   ====================================================== */
+
+/* Edit mode overlay styling */
+.tgp--editing {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Cluster wrapper for draggable positioning */
+.tgp-cluster {
+  position: relative;
+  will-change: transform;
+  transition: transform 0.05s ease-out;
+}
+
+/* Editing mode styling for clusters */
+.tgp-cluster--editing {
+  outline: 2px dashed var(--accent);
+  outline-offset: 8px;
+  border-radius: 12px;
+  background: rgba(118, 169, 250, 0.08);
+  transition: outline-color 0.15s, background 0.15s;
+}
+
+.tgp-cluster--editing:active {
+  outline-color: var(--success);
+  background: rgba(88, 217, 138, 0.12);
+}
+
+/* Cluster label shown in edit mode */
+.tgp-cluster-label {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  background: var(--accent);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Edit mode banner in StreamView */
+.sv-edit-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1002;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  border: 2px solid var(--accent);
+  background: rgba(10, 10, 12, 0.95);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  animation: fade-in 180ms var(--ease);
+}
+
+.sv-edit-banner svg {
+  color: var(--accent);
+}
+
+/* Edit mode toggle button */
+.sv-tgp-edit {
+  position: fixed;
+  bottom: 70px;
+  left: 14px;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-md);
+  background: rgba(10, 10, 12, 0.85);
+  color: var(--ink-soft);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sv-tgp-edit:hover {
+  background: rgba(20, 20, 24, 0.95);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.sv-tgp-edit--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+}
+
+.sv-tgp-edit--active:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 85%, #fff);
+  color: #000;
+}
+
+/* Reset button (only visible in edit mode) */
+.sv-tgp-reset {
+  position: fixed;
+  bottom: 122px;
+  left: 14px;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-md);
+  background: rgba(10, 10, 12, 0.85);
+  color: var(--ink-soft);
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sv-tgp-reset:hover {
+  background: rgba(20, 20, 24, 0.95);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.sv-tgp-reset:active {
+  transform: scale(0.96);
+}
+
+/* ======================================================
+   SETTINGS PAGE - TOUCH CONTROLLER SECTION
+   ====================================================== */
+
+.settings-layout-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-sm);
+  font-size: 0.78rem;
+}
+
+.settings-layout-offset {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink-soft);
+}
+
+.settings-layout-value {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-layout-reset-btn {
+  margin-top: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-layout-reset-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.settings-layout-reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ======================================================
    REDUCED MOTION
    ====================================================== */
 @media (prefers-reduced-motion: reduce) {

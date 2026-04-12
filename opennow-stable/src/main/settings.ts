@@ -48,6 +48,18 @@ export interface Settings {
   windowWidth: number;
   /** Window height */
   windowHeight: number;
+  /** Touch gamepad left cluster X offset (px) */
+  touchGamepadLeftOffsetX: number;
+  /** Touch gamepad left cluster Y offset (px) */
+  touchGamepadLeftOffsetY: number;
+  /** Touch gamepad center cluster X offset (px) */
+  touchGamepadCenterOffsetX: number;
+  /** Touch gamepad center cluster Y offset (px) */
+  touchGamepadCenterOffsetY: number;
+  /** Touch gamepad right cluster X offset (px) */
+  touchGamepadRightOffsetX: number;
+  /** Touch gamepad right cluster Y offset (px) */
+  touchGamepadRightOffsetY: number;
 }
 
 const defaultStopShortcut = "Ctrl+Shift+Q";
@@ -79,6 +91,12 @@ const DEFAULT_SETTINGS: Settings = {
   sessionClockShowDurationSeconds: 30,
   windowWidth: 1400,
   windowHeight: 900,
+  touchGamepadLeftOffsetX: 0,
+  touchGamepadLeftOffsetY: 0,
+  touchGamepadCenterOffsetX: 0,
+  touchGamepadCenterOffsetY: 0,
+  touchGamepadRightOffsetX: 0,
+  touchGamepadRightOffsetY: 0,
 };
 
 export class SettingsManager {
