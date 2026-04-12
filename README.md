@@ -179,7 +179,7 @@ Push a commit or trigger the workflow manually. The workflow will now produce `o
 
 ### Without CI signing configured
 
-If the secrets are not set, the workflow falls back to building an unsigned debug APK. These APKs will still require uninstall/reinstall between CI builds due to signature mismatches.
+If the secrets are not set, the workflow falls back to building a debug APK signed with the runner's ephemeral debug keystore. These APKs will still require uninstall/reinstall between CI builds due to signature mismatches.
 
 ---
 
