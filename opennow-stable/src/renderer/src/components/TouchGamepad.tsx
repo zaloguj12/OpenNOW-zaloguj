@@ -22,6 +22,7 @@ import type { GfnWebRtcClient } from "../gfn/webrtcClient";
 import {
   GAMEPAD_A, GAMEPAD_B, GAMEPAD_X, GAMEPAD_Y,
   GAMEPAD_LB, GAMEPAD_RB,
+  GAMEPAD_LS, GAMEPAD_RS,
   GAMEPAD_DPAD_UP, GAMEPAD_DPAD_DOWN, GAMEPAD_DPAD_LEFT, GAMEPAD_DPAD_RIGHT,
   GAMEPAD_START, GAMEPAD_BACK,
 } from "../gfn/inputProtocol";
@@ -275,6 +276,28 @@ function ShoulderButton({ label, xinputFlag, clientRef }: ShoulderProps): JSX.El
   );
 }
 
+interface TriggerButtonProps {
+  label: string;
+  side: "left" | "right";
+  clientRef: React.RefObject<GfnWebRtcClient | null>;
+}
+
+function TriggerButton({ label, side, clientRef }: TriggerButtonProps): JSX.Element {
+  const [pressed, setPressed] = useState(false);
+
+  return (
+    <button
+      type="button"
+      className={`tgp-shoulder ${pressed ? "tgp-shoulder--pressed" : ""}`}
+      onTouchStart={(e) => { e.preventDefault(); setPressed(true); clientRef.current?.sendGamepadTrigger(side, 255); }}
+      onTouchEnd={(e) => { e.preventDefault(); setPressed(false); clientRef.current?.sendGamepadTrigger(side, 0); }}
+      onTouchCancel={(e) => { e.preventDefault(); setPressed(false); clientRef.current?.sendGamepadTrigger(side, 0); }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // Centre button (Start / Back)
 
 interface CentreButtonProps {
@@ -309,12 +332,15 @@ export function TouchGamepad({ clientRef, visible }: Props): JSX.Element | null 
       {/* Left side: shoulder + D-pad + left stick */}
       <div className="tgp-side tgp-side--left">
         <div className="tgp-shoulders">
-          <ShoulderButton label="LT" xinputFlag={GAMEPAD_LB} clientRef={clientRef} />
+          <TriggerButton label="LT" side="left" clientRef={clientRef} />
           <ShoulderButton label="LB" xinputFlag={GAMEPAD_LB} clientRef={clientRef} />
         </div>
         <div className="tgp-lower-left">
           <Dpad clientRef={clientRef} />
-          <Thumbstick side="left" clientRef={clientRef} />
+          <div className="tgp-stick-group">
+            <Thumbstick side="left" clientRef={clientRef} />
+            <FaceButton label="L3" color="rgba(255,255,255,0.5)" xinputFlag={GAMEPAD_LS} clientRef={clientRef} />
+          </div>
         </div>
       </div>
 
@@ -328,10 +354,13 @@ export function TouchGamepad({ clientRef, visible }: Props): JSX.Element | null 
       <div className="tgp-side tgp-side--right">
         <div className="tgp-shoulders">
           <ShoulderButton label="RB" xinputFlag={GAMEPAD_RB} clientRef={clientRef} />
-          <ShoulderButton label="RT" xinputFlag={GAMEPAD_RB} clientRef={clientRef} />
+          <TriggerButton label="RT" side="right" clientRef={clientRef} />
         </div>
         <div className="tgp-lower-right">
-          <Thumbstick side="right" clientRef={clientRef} />
+          <div className="tgp-stick-group">
+            <Thumbstick side="right" clientRef={clientRef} />
+            <FaceButton label="R3" color="rgba(255,255,255,0.5)" xinputFlag={GAMEPAD_RS} clientRef={clientRef} />
+          </div>
           <div className="tgp-face">
             <FaceButton label="Y" color="#f5c518" xinputFlag={GAMEPAD_Y} clientRef={clientRef} />
             <div className="tgp-face-row">

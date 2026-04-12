@@ -2582,7 +2582,7 @@ body.controller-mode {
   font-size: 0.69rem;
 }
 
-/* Fullscreen button */
+.sv-tgp-toggle,
 .sv-fs {
   position: fixed; bottom: 18px; right: 18px; z-index: 1001;
   width: 38px; height: 38px;
@@ -2593,6 +2593,10 @@ body.controller-mode {
   display: flex; align-items: center; justify-content: center;
   transition: opacity var(--t-fast), background var(--t-fast), border-color var(--t-fast), color var(--t-fast); opacity: 0.5;
 }
+.sv-tgp-toggle {
+  right: 110px;
+}
+.sv-tgp-toggle:hover { opacity: 1; background: rgba(10, 10, 12, 0.95); border-color: var(--accent); color: var(--accent); }
 .sv-fs:hover { opacity: 1; background: rgba(10, 10, 12, 0.95); border-color: var(--accent); color: var(--accent); }
 
 /* End session button */
@@ -2860,201 +2864,15 @@ body.controller-mode {
 
 
 /* ======================================================
-   TOUCH GAMEPAD (Android / touch screens)
-   ====================================================== */
-
-.tgp {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 12px 16px 20px;
-  pointer-events: none;
-  z-index: 500;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.tgp-side {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: all;
-}
-
-.tgp-shoulders {
-  display: flex;
-  gap: 6px;
-}
-
-.tgp-lower-left,
-.tgp-lower-right {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-/* D-pad */
-.tgp-dpad {
-  width: 90px;
-  height: 90px;
-  touch-action: none;
-  cursor: pointer;
-}
-
-.tgp-dpad-cross {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-rows: 1fr 1fr 1fr;
-  grid-template-columns: 1fr;
-  gap: 2px;
-}
-
-.tgp-dpad-up,
-.tgp-dpad-down {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-  width: 30px;
-  height: 30px;
-  margin: 0 auto;
-}
-
-.tgp-dpad-row {
-  display: flex;
-  gap: 2px;
-  align-items: center;
-  justify-content: center;
-}
-
-.tgp-dpad-left,
-.tgp-dpad-right {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-  width: 30px;
-  height: 30px;
-}
-
-.tgp-dpad-center {
-  width: 30px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-}
-
-/* Analog stick */
-.tgp-stick {
-  width: 80px;
-  height: 80px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  border-radius: 50%;
-  position: relative;
-  touch-action: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tgp-stick-knob {
-  width: 34px;
-  height: 34px;
-  background: rgba(255, 255, 255, 0.35);
-  border-radius: 50%;
-  transition: transform 0.05s ease;
-  will-change: transform;
-}
-
-/* Face buttons */
-.tgp-face {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.tgp-face-row {
-  display: flex;
-  gap: 4px;
-}
-
-.tgp-face-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  background: rgba(0, 0, 0, 0.5);
-  font-weight: 700;
-  font-size: 0.8rem;
-  cursor: pointer;
-  touch-action: none;
-  transition: background 0.08s ease, color 0.08s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tgp-face-btn--pressed {
-  filter: brightness(0.85);
-}
-
-/* Shoulder buttons */
-.tgp-shoulder {
-  padding: 8px 14px;
-  border-radius: var(--r-sm);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  touch-action: none;
-  transition: background 0.08s ease;
-}
-
-.tgp-shoulder--pressed {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* Centre buttons (Start / Back) */
-.tgp-centre-cluster {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  pointer-events: all;
-  padding-bottom: 30px;
-}
-
-.tgp-centre {
-  padding: 7px 13px;
-  border-radius: var(--r-full);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.5);
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  cursor: pointer;
-  touch-action: none;
-  transition: background 0.08s ease;
-}
-
-.tgp-centre--pressed {
-  background: rgba(255, 255, 255, 0.18);
-  color: var(--ink);
-}
-
-/* ======================================================
    TOUCH GAMEPAD (Android / touch devices)
    ====================================================== */
 
 /* Root overlay -- sits above the stream video, covers full viewport */
 .tgp {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 200;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -3209,6 +3027,17 @@ body.controller-mode {
   border: 2px solid rgba(255,255,255,0.6);
   will-change: transform;
   transition: transform 0.02s linear;
+}
+.tgp-stick-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.tgp-stick-group .tgp-face-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 11px;
 }
 
 /* Face buttons grid */

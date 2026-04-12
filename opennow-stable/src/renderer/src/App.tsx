@@ -316,6 +316,7 @@ export function App(): JSX.Element {
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
   const [streamWarning, setStreamWarning] = useState<StreamWarningState | null>(null);
+  const [touchGamepadHidden, setTouchGamepadHidden] = useState(false);
 
   const handleControllerPageNavigate = useCallback((direction: "prev" | "next"): void => {
     if (!authSession || streamStatus !== "idle") {
@@ -588,6 +589,21 @@ export function App(): JSX.Element {
     settings.shortcutToggleAntiAfk,
     settings.shortcutToggleMicrophone,
   ]);
+
+  const hasTouchInput = typeof navigator !== "undefined" && typeof window !== "undefined" && (
+    navigator.maxTouchPoints > 0 ||
+    "ontouchstart" in window
+  );
+
+  const shouldShowTouchGamepad = streamStatus === "streaming" && (
+    isAndroid() || hasTouchInput
+  );
+
+  useEffect(() => {
+    if (streamStatus === "streaming" || streamStatus === "idle") {
+      setTouchGamepadHidden(false);
+    }
+  }, [streamStatus]);
 
   const requestEscLockedPointerCapture = useCallback(async (target: HTMLVideoElement) => {
     // Touch screens don't use pointer lock -- skip entirely on Android.
@@ -1528,6 +1544,8 @@ export function App(): JSX.Element {
             streamWarning={streamWarning}
             isConnecting={streamStatus === "connecting"}
             gameTitle={streamingGame?.title ?? "Game"}
+            showTouchGamepadToggle={shouldShowTouchGamepad}
+            touchGamepadHidden={touchGamepadHidden}
             onToggleFullscreen={() => {
               if (document.fullscreenElement) {
                 document.exitFullscreen().catch(() => {});
@@ -1543,14 +1561,16 @@ export function App(): JSX.Element {
             onToggleMicrophone={() => {
               clientRef.current?.toggleMicrophone();
             }}
-          />
+            onToggleTouchGamepad={() => {
+              setTouchGamepadHidden((hidden) => !hidden);
+            }}
+          >
+            <TouchGamepad
+              clientRef={clientRef}
+              visible={shouldShowTouchGamepad && !touchGamepadHidden}
+            />
+          </StreamView>
         )}
-
-        {/* On-screen gamepad -- only shown on Android while the stream is running */}
-        <TouchGamepad
-          clientRef={clientRef}
-          visible={isAndroid() && streamStatus === "streaming"}
-        />
 
         {streamStatus !== "streaming" && (
           <StreamLoading
