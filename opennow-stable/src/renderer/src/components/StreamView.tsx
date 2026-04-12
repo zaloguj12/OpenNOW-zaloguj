@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { JSX } from "react";
-import { Maximize, Minimize, Gamepad2, Loader2, LogOut, Clock3, AlertTriangle, Mic, MicOff } from "lucide-react";
+import type { JSX, ReactNode } from "react";
+import { Maximize, Minimize, Gamepad2, Loader2, LogOut, Clock3, AlertTriangle, Mic, MicOff, Eye, EyeOff, Move, RotateCcw } from "lucide-react";
 import type { StreamDiagnostics } from "../gfn/webrtcClient";
 
 interface StreamViewProps {
@@ -37,11 +37,18 @@ interface StreamViewProps {
   } | null;
   isConnecting: boolean;
   gameTitle: string;
+  children?: ReactNode;
+  showTouchGamepadToggle?: boolean;
+  touchGamepadHidden?: boolean;
+  touchGamepadEditMode?: boolean;
   onToggleFullscreen: () => void;
   onConfirmExit: () => void;
   onCancelExit: () => void;
   onEndSession: () => void;
   onToggleMicrophone?: () => void;
+  onToggleTouchGamepad?: () => void;
+  onToggleTouchGamepadEditMode?: () => void;
+  onResetTouchGamepadLayout?: () => void;
 }
 
 function getRttColor(rttMs: number): string {
@@ -111,11 +118,18 @@ export function StreamView({
   streamWarning,
   isConnecting,
   gameTitle,
+  children,
+  showTouchGamepadToggle = false,
+  touchGamepadHidden = false,
+  touchGamepadEditMode = false,
   onToggleFullscreen,
   onConfirmExit,
   onCancelExit,
   onEndSession,
   onToggleMicrophone,
+  onToggleTouchGamepad,
+  onToggleTouchGamepadEditMode,
+  onResetTouchGamepadLayout,
   hideStreamButtons = false,
 }: StreamViewProps): JSX.Element {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -259,6 +273,16 @@ export function StreamView({
       {!hasResolution && (
         <div className="sv-empty">
           <div className="sv-empty-grad" />
+        </div>
+      )}
+
+      {children}
+
+      {/* Edit mode banner */}
+      {touchGamepadEditMode && !isConnecting && (
+        <div className="sv-edit-banner">
+          <Move size={16} />
+          <span>Drag any button to reposition</span>
         </div>
       )}
 
@@ -447,6 +471,44 @@ export function StreamView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Touch gamepad visibility toggle */}
+      {!hideStreamButtons && !isConnecting && showTouchGamepadToggle && onToggleTouchGamepad && (
+        <button
+          className="sv-tgp-toggle"
+          onClick={onToggleTouchGamepad}
+          title={touchGamepadHidden ? "Show on-screen controller" : "Hide on-screen controller"}
+          aria-label={touchGamepadHidden ? "Show on-screen controller" : "Hide on-screen controller"}
+          aria-pressed={!touchGamepadHidden}
+        >
+          {touchGamepadHidden ? <Eye size={18} /> : <EyeOff size={18} />}
+        </button>
+      )}
+
+      {/* Touch gamepad edit mode toggle */}
+      {!hideStreamButtons && !isConnecting && showTouchGamepadToggle && !touchGamepadHidden && onToggleTouchGamepadEditMode && (
+        <button
+          className={`sv-tgp-edit ${touchGamepadEditMode ? "sv-tgp-edit--active" : ""}`}
+          onClick={onToggleTouchGamepadEditMode}
+          title={touchGamepadEditMode ? "Done editing layout" : "Edit controller layout"}
+          aria-label={touchGamepadEditMode ? "Done editing layout" : "Edit controller layout"}
+          aria-pressed={touchGamepadEditMode}
+        >
+          <Move size={18} />
+        </button>
+      )}
+
+      {/* Touch gamepad reset layout button (only visible in edit mode) */}
+      {!hideStreamButtons && !isConnecting && touchGamepadEditMode && onResetTouchGamepadLayout && (
+        <button
+          className="sv-tgp-reset"
+          onClick={onResetTouchGamepadLayout}
+          title="Reset controller layout to defaults"
+          aria-label="Reset controller layout to defaults"
+        >
+          <RotateCcw size={18} />
+        </button>
       )}
 
       {/* Fullscreen toggle */}

@@ -1137,6 +1137,7 @@ class GfnPlugin : Plugin() {
         result.put("sessionClockShowDurationSeconds", prefs.getInt("sessionClockShowDurationSeconds", 30))
         result.put("windowWidth", 1400)
         result.put("windowHeight", 900)
+        result.put("touchGamepadLayout", prefs.getString("touchGamepadLayout", "{}"))
         call.resolve(result)
     }
 

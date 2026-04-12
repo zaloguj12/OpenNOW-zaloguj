@@ -1,0 +1,117 @@
+name: android-build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "opennow-stable/**"
+      - ".github/workflows/android-build.yml"
+  push:
+    branches:
+      - Android
+      - main
+    tags:
+      - "v*"
+      - "android-v*"
+    paths:
+      - "opennow-stable/**"
+      - ".github/workflows/android-build.yml"
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: opennow-stable
+
+    env:
+      npm_config_audit: "false"
+      npm_config_fund: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('opennow-stable/android/**/*.gradle*', 'opennow-stable/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --progress=false
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync to Android
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # CI Signing: Decode keystore from base64 secret and set up signing environment
+      # If ANDROID_KEYSTORE_BASE64 secret is not configured, falls back to debug build
+      - name: Setup CI signing
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/ci-release.keystore
+          echo "CI_SIGNING_CONFIGURED=true" >> $GITHUB_ENV
+
+      # Build signed release APK when CI signing is configured
+      - name: Build signed release APK
+        if: ${{ env.CI_SIGNING_CONFIGURED == 'true' }}
+        working-directory: opennow-stable/android
+        env:
+          RELEASE_STORE_FILE: ci-release.keystore
+          RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      # Fallback: Build debug APK when CI signing is not configured
+      - name: Build debug APK
+        if: ${{ env.CI_SIGNING_CONFIGURED != 'true' }}
+        working-directory: opennow-stable/android
+        run: ./gradlew assembleDebug
+
+      - name: Upload signed release APK
+        if: ${{ env.CI_SIGNING_CONFIGURED == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: opennow-android-release
+          path: opennow-stable/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK
+        if: ${{ env.CI_SIGNING_CONFIGURED != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: opennow-android-debug
+          path: opennow-stable/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

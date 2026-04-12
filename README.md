@@ -79,12 +79,11 @@ Make sure your device is connected with USB debugging enabled.
 # Check device is visible
 adb devices
 
-# Uninstall old version first (avoids signature mismatch errors)
-adb uninstall com.zortos.opennow
-
-# Install
-adb install app\build\outputs\apk\debug\app-debug.apk
+# Install (use -r for reinstall/update)
+adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
+
+> **Note**: Local debug builds use your machine's debug keystore. If you previously installed a CI-built APK, you may need to uninstall first due to signature mismatch: `adb uninstall com.zortos.opennow`
 
 ---
 
@@ -98,8 +97,7 @@ npm run build
 npx cap sync android
 cd android
 .\gradlew assembleDebug
-adb uninstall com.zortos.opennow
-adb install app\build\outputs\apk\debug\app-debug.apk
+adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
 ---
@@ -123,6 +121,87 @@ adb logcat | Select-String "Capacitor|chromium|WebRTC|GfnPlugin"
 # Last 200 lines then exit
 adb logcat -d | Select-String "Capacitor|Console|error" | Select-Object -Last 200
 ```
+
+---
+
+## CI Build Artifacts
+
+GitHub Actions builds APKs automatically on pushes and PRs. When CI signing is configured (see below), the workflow produces **signed release APKs** that can be upgraded in-place without uninstalling.
+
+### Installing CI builds
+
+1. Go to **Actions** → select a successful workflow run
+2. Download the `opennow-android-release` artifact (or `opennow-android-debug` if signing isn't configured)
+3. Extract and install: `adb install -r app-release.apk`
+
+Successive CI builds use the same signing certificate, so you can install updates directly without uninstalling first.
+
+---
+
+## CI Signing Setup (for maintainers)
+
+### Why is this needed?
+
+Android requires APKs to be signed, and only allows in-place upgrades when both the package name AND signing certificate match. By default, debug builds use an auto-generated debug keystore unique to each machine. Since GitHub Actions runners are ephemeral, each CI run would generate a new keystore, causing signature mismatches that force users to uninstall before installing a new CI build.
+
+This repository uses stable CI signing to solve this: a single keystore is stored as a GitHub secret and used for all CI builds, ensuring consistent signatures.
+
+### Setting up CI signing
+
+#### 1. Generate a keystore (one-time)
+
+```bash
+keytool -genkey -v -keystore ci-release.keystore -alias ci-key -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Remember the passwords you set for the keystore and key.
+
+#### 2. Encode keystore as base64
+
+```bash
+base64 -i ci-release.keystore -o keystore-base64.txt
+```
+
+#### 3. Add GitHub secrets
+
+Go to **Settings** → **Secrets and variables** → **Actions** and add these secrets:
+
+| Secret Name | Value |
+|-------------|-------|
+| `ANDROID_KEYSTORE_BASE64` | Contents of `keystore-base64.txt` |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias (e.g., `ci-key`) |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+#### 4. Verify
+
+Push a commit or trigger the workflow manually. The workflow will now produce `opennow-android-release` artifacts signed with your stable keystore.
+
+### Without CI signing configured
+
+If the secrets are not set, the workflow falls back to building a debug APK signed with the runner's ephemeral debug keystore. These APKs will still require uninstall/reinstall between CI builds due to signature mismatches.
+
+---
+
+## Local Release Signing
+
+For local release builds (e.g., for Play Store), create `android/keystore.properties`:
+
+```properties
+RELEASE_STORE_FILE=path/to/your-release.keystore
+RELEASE_STORE_PASSWORD=your-keystore-password
+RELEASE_KEY_ALIAS=your-key-alias
+RELEASE_KEY_PASSWORD=your-key-password
+```
+
+Then build with:
+
+```powershell
+cd android
+.\gradlew assembleRelease
+```
+
+> **Important**: Never commit `keystore.properties` or keystore files to version control.
 
 ---
 
