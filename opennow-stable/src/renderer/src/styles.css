@@ -3140,12 +3140,15 @@ body.controller-mode {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+}
+/* -9px overlap: circles visually separate despite bounding-box overlap */
+.tgp-face > * + * {
+  margin-top: -9px;
 }
 .tgp-face-row {
   display: flex;
   flex-direction: row;
-  gap: 17px;
+  gap: 26px;
 }
 .tgp-face-btn {
   width: 48px;
