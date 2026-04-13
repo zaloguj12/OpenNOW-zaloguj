@@ -4,8 +4,9 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.os.Bundle
-import android.view.WindowManager
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.getcapacitor.BridgeActivity
 
 class MainActivity : BridgeActivity() {
@@ -19,6 +20,19 @@ class MainActivity : BridgeActivity() {
         // to correctly populate env(safe-area-inset-*) in the WebView.
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
+        applyImmersiveMode()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyImmersiveMode()
+        }
     }
 
     /** Called by GfnPlugin.setOrientation to lock or restore screen rotation. */
@@ -41,5 +55,12 @@ class MainActivity : BridgeActivity() {
             val plugin = bridge.getPlugin("GfnPlugin")?.getInstance() as? GfnPlugin
             plugin?.handleOAuthRedirect(uri)
         }
+    }
+
+    private fun applyImmersiveMode() {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 }
