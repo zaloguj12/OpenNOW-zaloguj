@@ -14,10 +14,12 @@
  */
 
 import { getPlatform } from "./detect";
-import type { OpenNowApi } from "@shared/gfn";
+import type { OpenNowApi, PingResult, StreamRegion, KeyboardLayout, GameLanguage } from "@shared/gfn";
+import { DEFAULT_KEYBOARD_LAYOUT, resolveGfnKeyboardLayout } from "@shared/gfn";
 import { createSession, pollSession, stopSession, getActiveSessions, claimSession } from "@main/gfn/cloudmatch";
 import { fetchMainGames, fetchLibraryGames, fetchPublicGames as fetchPublicGamesElectron, resolveLaunchAppId } from "@main/gfn/games";
 import { BrowserSignalingClient } from "./browserSignaling";
+import { buildDeviceHeaders } from "@shared/deviceHeaders";
 
 // Call a Capacitor native plugin method directly via the low-level bridge.
 // This bypasses registerPlugin() which behaves inconsistently across Capacitor versions.
@@ -153,7 +155,7 @@ function buildCapacitorApi(): OpenNowApi {
       return () => fullscreenListeners.delete(listener);
     },
     toggleFullscreen: () => callNativePlugin("toggleFullscreen"),
-    setOrientation: (mode: string) => callNativePlugin("setOrientation", { mode }),
+
     togglePointerLock: () => Promise.resolve(), // no pointer lock on touch screens
 
     getSettings: () =>
@@ -162,22 +164,58 @@ function buildCapacitorApi(): OpenNowApi {
         8000,
         // Default settings returned if the plugin hangs
         {
-          resolution: "1920x1080", fps: 60, maxBitrateMbps: 75, codec: "H264",
+          resolution: "1920x1080", aspectRatio: "16:9", fps: 60, maxBitrateMbps: 75, codec: "H264",
           decoderPreference: "auto", encoderPreference: "auto", colorQuality: "10bit_420",
-          region: "", clipboardPaste: false, mouseSensitivity: 1,
+          region: "", clipboardPaste: false, mouseSensitivity: 1, mouseAcceleration: 1,
           shortcutToggleStats: "F3", shortcutTogglePointerLock: "F8",
           shortcutStopStream: "Ctrl+Shift+Q", shortcutToggleAntiAfk: "Ctrl+Shift+K",
-          shortcutToggleMicrophone: "Ctrl+Shift+M", microphoneMode: "disabled",
-          microphoneDeviceId: "", hideStreamButtons: false,
+          shortcutToggleMicrophone: "Ctrl+Shift+M", shortcutScreenshot: "F11", shortcutToggleRecording: "F12",
+          microphoneMode: "disabled", microphoneDeviceId: "", hideStreamButtons: false,
+          showStatsOnLaunch: false, controllerMode: false, controllerUiSounds: false,
+          controllerBackgroundAnimations: false, autoLoadControllerLibrary: false,
+          autoFullScreen: false, favoriteGameIds: [], sessionCounterEnabled: false,
           sessionClockShowEveryMinutes: 60, sessionClockShowDurationSeconds: 30,
           windowWidth: 1400, windowHeight: 900,
-          touchGamepadLayout: "{}",
+          touchGamepadLayout: "{}", keyboardLayout: DEFAULT_KEYBOARD_LAYOUT,
+          gameLanguage: "en_US" as GameLanguage, enableL4S: false, enableCloudGsync: false,
+          discordRichPresence: false,
         } as any
       ),
     setSetting: (key, value) => callNativePlugin("setSetting", { key, value }),
     resetSettings: () => callNativePlugin("resetSettings"),
-    pingRegions: (urls: string[]) =>
-      callNativePlugin<{ results: Record<string, number> }>("pingRegions", { urls }),
+    pingRegions: async (regions: StreamRegion[]): Promise<PingResult[]> => {
+      const urls = regions.map(r => r.url);
+      const result = await callNativePlugin<{ results: Record<string, number> }>("pingRegions", { urls });
+      return regions.map((region) => ({
+        url: region.url,
+        pingMs: result.results[region.url] ?? null,
+      }));
+    },
+    reportSessionAd: () => Promise.resolve(null as any),
+    requestKeyframe: () => Promise.resolve(),
+    quitApp: () => Promise.resolve(),
+    setFullscreen: () => Promise.resolve(),
+    getMicrophonePermission: () => Promise.resolve({ platform: "android", isMacOs: false, status: "not-applicable", granted: true, canRequest: false, shouldUseBrowserApi: false } as any),
+    exportLogs: () => Promise.resolve(""),
+    saveScreenshot: () => Promise.resolve(null as any),
+    listScreenshots: () => Promise.resolve([]),
+    deleteScreenshot: () => Promise.resolve(),
+    saveScreenshotAs: () => Promise.resolve({ saved: false } as any),
+    onTriggerScreenshot: () => () => {},
+    beginRecording: () => Promise.resolve({ recordingId: "" } as any),
+    sendRecordingChunk: () => Promise.resolve(),
+    finishRecording: () => Promise.resolve(null as any),
+    abortRecording: () => Promise.resolve(),
+    listRecordings: () => Promise.resolve([]),
+    deleteRecording: () => Promise.resolve(),
+    showRecordingInFolder: () => Promise.resolve(),
+    listMediaByGame: () => Promise.resolve({ screenshots: [], videos: [] } as any),
+    getMediaThumbnail: () => Promise.resolve(null),
+    showMediaInFolder: () => Promise.resolve(),
+    deleteCache: () => Promise.resolve(),
+    fetchPrintedWasteQueue: () => Promise.resolve({} as any),
+    fetchPrintedWasteServerMapping: () => Promise.resolve({} as any),
+    getThanksData: () => Promise.resolve({ contributors: [], supporters: [] } as any),
   };
 }
 

@@ -1,11 +1,12 @@
+import type { SessionErrorInfo } from "@shared/sessionError";
+
 /**
- * GFN CloudMatch Error Codes
+ * CloudMatch error codes.
  *
- * Error code mappings extracted from the official GFN web client.
- * These provide user-friendly error messages for session failures.
+ * These mappings provide user-friendly messages for session failures.
  */
 
-/** GFN Session Error Codes from official client */
+/** Session error code constants. */
 export enum GfnErrorCode {
   // Success codes
   Success = 15859712,
@@ -296,7 +297,7 @@ export const ERROR_MESSAGES: Map<number, ErrorMessageEntry> = new Map([
     3237093656,
     {
       title: "Under Maintenance",
-      description: "GeForce NOW is currently under maintenance. Please try again later.",
+      description: "The service is currently under maintenance. Please try again later.",
     },
   ],
   [
@@ -394,14 +395,14 @@ export const ERROR_MESSAGES: Map<number, ErrorMessageEntry> = new Map([
     3237093684,
     {
       title: "Region Not Supported",
-      description: "GeForce NOW is not available in your region.",
+      description: "The service is not available in your region.",
     },
   ],
   [
     3237093685,
     {
       title: "Region Banned",
-      description: "GeForce NOW is not available in your region.",
+      description: "The service is not available in your region.",
     },
   ],
   [
@@ -442,8 +443,9 @@ export const ERROR_MESSAGES: Map<number, ErrorMessageEntry> = new Map([
   [
     3237093695,
     {
-      title: "Region Not Supported",
-      description: "Streaming is not supported in your region.",
+      title: "GeForce NOW Unavailable in Your Region",
+      description:
+        "GeForce NOW has restricted streaming in your region. This is not an OpenNOW issue — NVIDIA has blocked access from your location. You may need to use a VPN or check GeForce NOW's supported countries list.",
     },
   ],
   [
@@ -534,7 +536,7 @@ export const ERROR_MESSAGES: Map<number, ErrorMessageEntry> = new Map([
     3237093722,
     {
       title: "Storage Error",
-      description: "GFN storage is not available.",
+      description: "Service storage is not available.",
     },
   ],
 
@@ -634,26 +636,6 @@ export const ERROR_MESSAGES: Map<number, ErrorMessageEntry> = new Map([
   ],
 ]);
 
-/** Parsed error information from CloudMatch response */
-export interface SessionErrorInfo {
-  /** HTTP status code (e.g., 403) */
-  httpStatus: number;
-  /** CloudMatch status code from requestStatus.statusCode */
-  statusCode: number;
-  /** Status description from requestStatus.statusDescription */
-  statusDescription?: string;
-  /** Unified error code from requestStatus.unifiedErrorCode */
-  unifiedErrorCode?: number;
-  /** Session error code from session.errorCode */
-  sessionErrorCode?: number;
-  /** Computed GFN error code */
-  gfnErrorCode: number;
-  /** User-friendly title */
-  title: string;
-  /** User-friendly description */
-  description: string;
-}
-
 /** CloudMatch error response structure */
 interface CloudMatchErrorResponse {
   requestStatus?: {
@@ -679,7 +661,7 @@ export class SessionError extends Error {
   public readonly unifiedErrorCode?: number;
   /** Session error code from session.errorCode */
   public readonly sessionErrorCode?: number;
-  /** Computed GFN error code */
+  /** Computed service error code */
   public readonly gfnErrorCode: number;
   /** User-friendly title */
   public readonly title: string;
@@ -733,7 +715,7 @@ export class SessionError extends Error {
     const unifiedErrorCode = json.requestStatus?.unifiedErrorCode;
     const sessionErrorCode = json.session?.errorCode;
 
-    // Compute GFN error code using official client logic
+    // Compute normalized service error code
     const gfnErrorCode = SessionError.computeErrorCode(statusCode, unifiedErrorCode);
 
     // Get user-friendly message
@@ -756,7 +738,7 @@ export class SessionError extends Error {
   }
 
   /**
-   * Compute GFN error code from CloudMatch response (matching official client logic)
+   * Compute service error code from CloudMatch response
    */
   private static computeErrorCode(statusCode: number, unifiedErrorCode?: number): number {
     // Base error code

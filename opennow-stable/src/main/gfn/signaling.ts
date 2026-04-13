@@ -4,6 +4,7 @@ import WebSocket from "ws";
 
 import type {
   IceCandidatePayload,
+  KeyframeRequest,
   MainToRendererSignalingEvent,
   SendAnswerRequest,
 } from "@shared/gfn";
@@ -31,6 +32,7 @@ export class GfnSignalingClient {
   private peerName = `peer-${Math.floor(Math.random() * 10_000_000_000)}`;
   private ackCounter = 0;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private connectionGeneration = 0;
   private listeners = new Set<(event: MainToRendererSignalingEvent) => void>();
 
   constructor(
@@ -40,25 +42,19 @@ export class GfnSignalingClient {
   ) {}
 
   private buildSignInUrl(): string {
-    // Match Rust behavior: extract host:port from signalingUrl if available,
-    // since the signalingUrl contains the real server address (which may differ
-    // from signalingServer when the resource path was an rtsps:// URL)
-    let serverWithPort: string;
+    const fallbackHost = this.signalingServer.includes(":")
+      ? this.signalingServer
+      : `${this.signalingServer}:443`;
+    const baseUrl = this.signalingUrl?.trim() || `wss://${fallbackHost}/nvst/`;
+    const signInUrl = new URL(baseUrl);
 
-    if (this.signalingUrl) {
-      // Extract host:port from wss://host:port/path
-      const withoutScheme = this.signalingUrl.replace(/^wss?:\/\//, "");
-      const hostPort = withoutScheme.split("/")[0];
-      serverWithPort = hostPort && hostPort.length > 0
-        ? (hostPort.includes(":") ? hostPort : `${hostPort}:443`)
-        : (this.signalingServer.includes(":") ? this.signalingServer : `${this.signalingServer}:443`);
-    } else {
-      serverWithPort = this.signalingServer.includes(":")
-        ? this.signalingServer
-        : `${this.signalingServer}:443`;
-    }
+    signInUrl.protocol = "wss:";
+    signInUrl.pathname = `${signInUrl.pathname.replace(/\/?$/, "/")}sign_in`;
+    signInUrl.search = "";
+    signInUrl.searchParams.set("peer_id", this.peerName);
+    signInUrl.searchParams.set("version", "2");
 
-    const url = `wss://${serverWithPort}/nvst/sign_in?peer_id=${this.peerName}&version=2`;
+    const url = signInUrl.toString();
     console.log("[Signaling] URL:", url, "(server:", this.signalingServer, ", signalingUrl:", this.signalingUrl, ")");
     return url;
   }
@@ -123,6 +119,7 @@ export class GfnSignalingClient {
 
     const url = this.buildSignInUrl();
     const protocol = `x-nv-sessionid.${this.sessionId}`;
+    const generation = ++this.connectionGeneration;
 
     console.log("[Signaling] Connecting to:", url);
     console.log("[Signaling] Session ID:", this.sessionId);
@@ -144,12 +141,20 @@ export class GfnSignalingClient {
 
       this.ws = ws;
 
+      const isCurrentSocket = (): boolean => this.ws === ws && this.connectionGeneration === generation;
+
       ws.once("error", (error) => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         this.emit({ type: "error", message: `Signaling connect failed: ${String(error)}` });
         reject(error);
       });
 
       ws.once("open", () => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         this.sendPeerInfo();
         this.setupHeartbeat();
         this.emit({ type: "connected" });
@@ -157,12 +162,22 @@ export class GfnSignalingClient {
       });
 
       ws.on("message", (raw) => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         const text = typeof raw === "string" ? raw : raw.toString("utf8");
         this.handleMessage(text);
       });
 
       ws.on("close", (_code, reason) => {
         this.clearHeartbeat();
+
+        if (!isCurrentSocket()) {
+          return;
+        }
+
+        this.ws = null;
+
         const reasonText = typeof reason === "string" ? reason : reason.toString("utf8");
         this.emit({ type: "disconnected", reason: reasonText || "socket closed" });
       });
@@ -271,11 +286,32 @@ export class GfnSignalingClient {
     });
   }
 
+  async requestKeyframe(payload: KeyframeRequest): Promise<void> {
+    this.sendJson({
+      peer_msg: {
+        from: this.peerId,
+        to: 1,
+        msg: JSON.stringify({
+          type: "request_keyframe",
+          reason: payload.reason,
+          backlogFrames: payload.backlogFrames,
+          attempt: payload.attempt,
+        }),
+      },
+      ackid: this.nextAckId(),
+    });
+    console.log(
+      `[Signaling] Sent keyframe request (reason=${payload.reason}, backlog=${payload.backlogFrames}, attempt=${payload.attempt})`,
+    );
+  }
+
   disconnect(): void {
+    this.connectionGeneration += 1;
     this.clearHeartbeat();
     if (this.ws) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      socket.close();
     }
   }
 }

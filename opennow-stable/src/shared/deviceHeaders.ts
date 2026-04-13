@@ -8,6 +8,8 @@
  * We send different values depending on whether we are on desktop or Android.
  */
 
+declare const process: { platform?: string } | undefined;
+
 export type DeviceOs = "WINDOWS" | "MACOS" | "LINUX" | "ANDROID" | "IOS";
 export type DeviceType = "DESKTOP" | "MOBILE" | "TABLET" | "TV";
 export type ClientType = "NATIVE" | "BROWSER" | "ANDROID";
@@ -54,9 +56,10 @@ export function getDeviceProfile(forAndroid: boolean): GfnDeviceProfile {
 
   // Detect the desktop OS from process.platform (only available in Node / Electron)
   let os: DeviceOs = "WINDOWS";
-  if (typeof process !== "undefined") {
-    if (process.platform === "darwin") os = "MACOS";
-    else if (process.platform === "linux") os = "LINUX";
+  // Guard for browser/WebView where process is not available
+  if (typeof process !== "undefined" && process && typeof (process as any).platform !== "undefined") {
+    if ((process as any).platform === "darwin") os = "MACOS";
+    else if ((process as any).platform === "linux") os = "LINUX";
   }
 
   return {

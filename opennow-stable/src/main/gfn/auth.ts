@@ -142,6 +142,17 @@ function generateDeviceId(): string {
   return createHash("sha256").update(`${host}:${username}:opennow-stable`).digest("hex");
 }
 
+function gravatarUrl(email: string, size = 80): string | undefined {
+  // Guard: only compute gravatar when running in Node.js environment
+  // (not in browser/WebView where crypto shim only exposes randomUUID)
+  if (typeof process === "undefined") {
+    return undefined;
+  }
+  const normalized = email.trim().toLowerCase();
+  const hash = createHash("md5").update(normalized).digest("hex");
+  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=identicon`;
+}
+
 function generatePkce(): { verifier: string; challenge: string } {
   const verifier = randomBytes(64)
     .toString("base64")
@@ -380,13 +391,18 @@ async function fetchUserInfo(tokens: AuthTokens): Promise<AuthUser> {
   }>(jwtToken);
 
   if (parsed?.sub) {
-    return {
-      userId: parsed.sub,
-      displayName: parsed.preferred_username ?? parsed.email?.split("@")[0] ?? "User",
-      email: parsed.email,
-      avatarUrl: parsed.picture,
-      membershipTier: parsed.gfn_tier ?? "FREE",
-    };
+    const emailFromToken = parsed.email;
+    const pictureFromToken = parsed.picture;
+    if (emailFromToken || pictureFromToken) {
+      const avatar = pictureFromToken ?? (emailFromToken ? gravatarUrl(emailFromToken) : undefined);
+      return {
+        userId: parsed.sub,
+        displayName: parsed.preferred_username ?? emailFromToken?.split("@")[0] ?? "User",
+        email: emailFromToken,
+        avatarUrl: avatar,
+        membershipTier: parsed.gfn_tier ?? "FREE",
+      };
+    }
   }
 
   const response = await fetch(USERINFO_ENDPOINT, {
@@ -409,11 +425,14 @@ async function fetchUserInfo(tokens: AuthTokens): Promise<AuthUser> {
     picture?: string;
   };
 
+  const email = payload.email;
+  const avatar = payload.picture ?? (email ? gravatarUrl(email) : undefined);
+
   return {
     userId: payload.sub,
-    displayName: payload.preferred_username ?? payload.email?.split("@")[0] ?? "User",
-    email: payload.email,
-    avatarUrl: payload.picture,
+    displayName: payload.preferred_username ?? email?.split("@")[0] ?? "User",
+    email,
+    avatarUrl: avatar,
     membershipTier: "FREE",
   };
 }
@@ -851,6 +870,7 @@ export class AuthService {
       let user = this.session?.user;
       try {
         user = await fetchUserInfo(refreshedTokens);
+        console.debug("auth: fetched user info on token refresh", { userId: user.userId, email: user.email, avatarUrl: user.avatarUrl });
       } catch (error) {
         console.warn("Token refresh succeeded but user info refresh failed. Keeping cached user:", error);
       }

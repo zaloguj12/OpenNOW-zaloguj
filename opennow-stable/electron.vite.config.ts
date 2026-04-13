@@ -41,6 +41,8 @@ export default defineConfig({
         // imported in the WebView (Capacitor) renderer.
         // The shim exposes only randomUUID() which is what cloudmatch.ts uses.
         "node:crypto": resolve(__dirname, "src/renderer/src/platform/cryptoShim.ts"),
+        // Alias node:dns to a browser shim since DNS resolution is not available in WebView
+        "node:dns": resolve(__dirname, "src/renderer/src/platform/dnsShim.ts"),
         // Allow the renderer to import shared main-process GFN logic.
         "@main": resolve(__dirname, "src/main"),
       },

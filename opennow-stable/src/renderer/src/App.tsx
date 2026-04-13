@@ -272,6 +272,7 @@ export function App(): JSX.Element {
   // Settings State
   const [settings, setSettings] = useState<Settings>({
     resolution: "1920x1080",
+    aspectRatio: "16:9",
     fps: 60,
     maxBitrateMbps: 75,
     codec: "H264",
@@ -281,19 +282,35 @@ export function App(): JSX.Element {
     region: "",
     clipboardPaste: false,
     mouseSensitivity: 1,
+    mouseAcceleration: 1,
     shortcutToggleStats: DEFAULT_SHORTCUTS.shortcutToggleStats,
     shortcutTogglePointerLock: DEFAULT_SHORTCUTS.shortcutTogglePointerLock,
     shortcutStopStream: DEFAULT_SHORTCUTS.shortcutStopStream,
     shortcutToggleAntiAfk: DEFAULT_SHORTCUTS.shortcutToggleAntiAfk,
     shortcutToggleMicrophone: DEFAULT_SHORTCUTS.shortcutToggleMicrophone,
+    shortcutScreenshot: "F11",
+    shortcutToggleRecording: "F12",
     microphoneMode: "disabled",
     microphoneDeviceId: "",
     hideStreamButtons: false,
+    showStatsOnLaunch: false,
+    controllerMode: false,
+    controllerUiSounds: false,
+    controllerBackgroundAnimations: false,
+    autoLoadControllerLibrary: false,
+    autoFullScreen: false,
+    favoriteGameIds: [],
+    sessionCounterEnabled: false,
     sessionClockShowEveryMinutes: 60,
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
     windowHeight: 900,
     touchGamepadLayout: "{}",
+    keyboardLayout: "en-US",
+    gameLanguage: "en_US",
+    enableL4S: false,
+    enableCloudGsync: false,
+    discordRichPresence: false,
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
@@ -990,6 +1007,10 @@ export function App(): JSX.Element {
         maxBitrateMbps: settings.maxBitrateMbps,
         codec: settings.codec,
         colorQuality: settings.colorQuality,
+        keyboardLayout: settings.keyboardLayout,
+        gameLanguage: settings.gameLanguage,
+        enableL4S: settings.enableL4S,
+        enableCloudGsync: settings.enableCloudGsync,
       },
     });
 
@@ -1117,6 +1138,10 @@ export function App(): JSX.Element {
           maxBitrateMbps: settings.maxBitrateMbps,
           codec: settings.codec,
           colorQuality: settings.colorQuality,
+          keyboardLayout: settings.keyboardLayout,
+          gameLanguage: settings.gameLanguage,
+          enableL4S: settings.enableL4S,
+          enableCloudGsync: settings.enableCloudGsync,
         },
       });
 

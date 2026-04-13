@@ -8,6 +8,9 @@
     "paths": {
       "@shared/*": [
         "src/shared/*"
+      ],
+      "@main/*": [
+        "src/main/*"
       ]
     },
     "strict": true,
@@ -21,13 +24,15 @@
       "DOM.Iterable"
     ],
     "types": [
-      "vite/client"
+      "vite/client",
+      "node"
     ],
     "skipLibCheck": true,
     "noEmit": true
   },
   "include": [
     "src/renderer/src",
-    "src/shared"
+    "src/shared",
+    "src/main"
   ]
 }

@@ -7,6 +7,9 @@
     "paths": {
       "@shared/*": [
         "src/shared/*"
+      ],
+      "@main/*": [
+        "src/main/*"
       ]
     },
     "strict": true,
