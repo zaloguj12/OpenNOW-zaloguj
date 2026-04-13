@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.*
-import java.nio.ByteBuffer
 
 private const val TAG = "NativeStreaming"
 
@@ -91,15 +90,10 @@ class NativeStreamingPlugin : Plugin() {
             /* enableIntelVp8Encoder= */ false,
             /* enableH264HighProfile= */ false
         )
-        val audioDeviceModule = JavaAudioDeviceModule.builder(ctx)
-            .setUseHardwareAcousticEchoCanceler(true)
-            .setUseHardwareNoiseSuppressor(true)
-            .createAudioDeviceModule()
 
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setVideoDecoderFactory(videoDecoderFactory)
             .setVideoEncoderFactory(videoEncoderFactory)
-            .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory()
 
         Log.i(TAG, "PeerConnectionFactory initialised (HW decoder + EGL)")
