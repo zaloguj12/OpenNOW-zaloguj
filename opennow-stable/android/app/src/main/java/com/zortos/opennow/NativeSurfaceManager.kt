@@ -1,113 +1,66 @@
 package com.zortos.opennow
 
 import android.app.Activity
-import android.graphics.Color
-import android.graphics.PixelFormat
 import android.view.Gravity
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import org.webrtc.EglBase
+import org.webrtc.RendererCommon
+import org.webrtc.SurfaceViewRenderer
 
 /**
  * NativeSurfaceManager
  *
- * Creates and manages a SurfaceView that sits on top of the Capacitor WebView.
- * The native WebRTC video decoder renders directly into this surface, bypassing
- * the WebView compositor entirely — this is the key latency win.
- *
- * Lifecycle:
- *   create()  → adds SurfaceView to the window, returns the Surface for MediaCodec
- *   resize()  → call when orientation changes
- *   destroy() → removes the SurfaceView and releases the surface
+ * Adds a SurfaceViewRenderer directly into the activity's view hierarchy,
+ * sitting behind the WebView so the HUD / touch controls stay on top.
+ * libwebrtc renders decoded frames straight into this view via EGL textures —
+ * no WebView compositor involvement, which is the latency win.
  */
 class NativeSurfaceManager(private val activity: Activity) {
 
-    private var surfaceView: SurfaceView? = null
-    private var surfaceReadyCallback: ((SurfaceHolder) -> Unit)? = null
-
-    /** True once the underlying Surface is ready for rendering. */
-    var isSurfaceReady = false
-        private set
+    private var renderer: SurfaceViewRenderer? = null
 
     /**
-     * Add the overlay SurfaceView to the activity's root view.
-     * [onReady] is called on the main thread once the Surface is created.
+     * Create and attach the renderer to the window.
+     * Must be called on any thread — posts to main thread internally.
+     * [eglContext] is the shared EglBase context from PeerConnectionFactory.
      */
-    fun create(onReady: (SurfaceHolder) -> Unit) {
+    fun create(eglContext: EglBase.Context): SurfaceViewRenderer {
+        val sv = SurfaceViewRenderer(activity).apply {
+            init(eglContext, null)
+            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+            setEnableHardwareScaler(true)
+            // Keep the z-order below the WebView so the UI overlay stays visible
+            setZOrderMediaOverlay(false)
+        }
+
+        val params = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER
+        )
+
         activity.runOnUiThread {
-            if (surfaceView != null) {
-                // Already created — just fire the callback if surface is ready
-                surfaceView?.holder?.let { if (isSurfaceReady) onReady(it) }
-                return@runOnUiThread
-            }
-
-            surfaceReadyCallback = onReady
-
-            val sv = SurfaceView(activity).apply {
-                // Transparent background so the WebView UI (stats overlay, buttons)
-                // can still be rendered on top via a second transparent overlay.
-                setZOrderMediaOverlay(true)
-                holder.setFormat(PixelFormat.TRANSLUCENT)
-                setBackgroundColor(Color.BLACK)
-            }
-
-            sv.holder.addCallback(object : SurfaceHolder.Callback {
-                override fun surfaceCreated(holder: SurfaceHolder) {
-                    isSurfaceReady = true
-                    surfaceReadyCallback?.invoke(holder)
-                }
-
-                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                    // No-op: MediaCodec handles resolution changes internally
-                }
-
-                override fun surfaceDestroyed(holder: SurfaceHolder) {
-                    isSurfaceReady = false
-                }
-            })
-
-            val params = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
-
-            // Insert below the WebView so the WebView UI (HUD, buttons) stays on top.
-            // The WebView background must be transparent for the video to show through.
+            // Insert at index 0 so it sits behind the WebView
             val root = activity.window.decorView.rootView as? ViewGroup
                 ?: activity.findViewById(android.R.id.content)
-            root.addView(sv, 0, params) // index 0 = behind everything else
-
-            surfaceView = sv
+            root.addView(sv, 0, params)
         }
+
+        renderer = sv
+        return sv
     }
 
-    /** Remove the SurfaceView from the window. Safe to call multiple times. */
+    /** Remove the renderer from the window and release GL resources. */
     fun destroy() {
+        val sv = renderer ?: return
+        renderer = null
         activity.runOnUiThread {
-            val sv = surfaceView ?: return@runOnUiThread
-            val root = sv.parent as? ViewGroup
-            root?.removeView(sv)
-            surfaceView = null
-            isSurfaceReady = false
-            surfaceReadyCallback = null
+            (sv.parent as? ViewGroup)?.removeView(sv)
         }
+        try { sv.release() } catch (_: Exception) {}
     }
 
-    /** Bring the surface to front (e.g. after returning from background). */
-    fun show() {
-        activity.runOnUiThread {
-            surfaceView?.visibility = android.view.View.VISIBLE
-        }
-    }
-
-    /** Hide the surface without destroying it (e.g. when showing a dialog). */
-    fun hide() {
-        activity.runOnUiThread {
-            surfaceView?.visibility = android.view.View.INVISIBLE
-        }
-    }
-
-    fun getSurfaceHolder(): SurfaceHolder? = surfaceView?.holder
+    fun show() { activity.runOnUiThread { renderer?.visibility = android.view.View.VISIBLE } }
+    fun hide() { activity.runOnUiThread { renderer?.visibility = android.view.View.INVISIBLE } }
 }
