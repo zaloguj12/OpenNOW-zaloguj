@@ -2950,6 +2950,34 @@ export class GfnWebRtcClient {
   }
 
   /**
+   * Set an analog trigger value for on-screen LT/RT buttons.
+   * side is "left" or "right", value is 0-255.
+   */
+  public sendGamepadTrigger(side: "left" | "right", value: number): void {
+    if (!this.inputReady) return;
+    const prev = this.previousGamepadStates.get(0);
+    const clamped = Math.max(0, Math.min(255, Math.round(value)));
+
+    const state = {
+      controllerId: 0,
+      buttons: prev?.buttons ?? 0,
+      leftTrigger: side === "left" ? clamped : (prev?.leftTrigger ?? 0),
+      rightTrigger: side === "right" ? clamped : (prev?.rightTrigger ?? 0),
+      leftStickX: prev?.leftStickX ?? 0,
+      leftStickY: prev?.leftStickY ?? 0,
+      rightStickX: prev?.rightStickX ?? 0,
+      rightStickY: prev?.rightStickY ?? 0,
+      connected: true,
+      timestampUs: BigInt(Math.floor(performance.now() * 1000)),
+    };
+
+    this.previousGamepadStates.set(0, state);
+    const usePR = this.mouseInputChannel?.readyState === "open";
+    const bytes = this.inputEncoder.encodeGamepadState(state, this.gamepadBitmap | 1, usePR);
+    this.sendGamepad(bytes);
+  }
+
+  /**
    * Set an analog stick value for on-screen thumbstick controls.
    * x and y are normalised floats in [-1, 1].
    */

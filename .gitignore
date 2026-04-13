@@ -44,3 +44,19 @@ opennow-stable/SESSION_17_REGION_PING.txt
 opennow-stable/PROGRESS.txt
 opennow-stable/SESSION_13_UI_RELAYOUT.txt
 opennow-stable/SESSION_14_BUGFIXES.txt
+
+# OpenNOW generated output
+opennow-stable/dist/
+opennow-stable/dist-electron/
+opennow-stable/dist-release/
+opennow-stable/out/
+opennow-stable/.turbo/
+opennow-stable/coverage/
+opennow-stable/android/.gradle/
+opennow-stable/android/build/
+opennow-stable/android/app/build/
+opennow-stable/android/local.properties
+opennow-stable/android/app/src/main/assets/public/
+opennow-stable/android/app/src/main/assets/capacitor.config.json
+opennow-stable/android/app/src/main/assets/capacitor.plugins.json
+opennow-stable/android/app/src/main/res/xml/config.xml

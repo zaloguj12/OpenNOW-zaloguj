@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+import { Keyboard } from "@capacitor/keyboard";
 
 import { getPlatformApi } from "./platform/index";
 import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
-import { TouchGamepad } from "./components/TouchGamepad";
+import { TouchGamepad, parseLayout } from "./components/TouchGamepad";
+import type { GamepadElementId, GamepadLayout } from "./components/TouchGamepad";
 import { TouchInputHandler } from "./gfn/touchInput";
 
 import type {
@@ -291,6 +293,7 @@ export function App(): JSX.Element {
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
     windowHeight: 900,
+    touchGamepadLayout: "{}",
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
@@ -316,6 +319,8 @@ export function App(): JSX.Element {
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
   const [streamWarning, setStreamWarning] = useState<StreamWarningState | null>(null);
+  const [touchGamepadHidden, setTouchGamepadHidden] = useState(false);
+  const [touchGamepadEditMode, setTouchGamepadEditMode] = useState(false);
 
   const handleControllerPageNavigate = useCallback((direction: "prev" | "next"): void => {
     if (!authSession || streamStatus !== "idle") {
@@ -589,6 +594,21 @@ export function App(): JSX.Element {
     settings.shortcutToggleMicrophone,
   ]);
 
+  const hasTouchInput = typeof navigator !== "undefined" && typeof window !== "undefined" && (
+    navigator.maxTouchPoints > 0 ||
+    "ontouchstart" in window
+  );
+
+  const shouldShowTouchGamepad = streamStatus === "streaming" && (
+    isAndroid() || hasTouchInput
+  );
+
+  useEffect(() => {
+    if (streamStatus === "streaming" || streamStatus === "idle") {
+      setTouchGamepadHidden(false);
+    }
+  }, [streamStatus]);
+
   const requestEscLockedPointerCapture = useCallback(async (target: HTMLVideoElement) => {
     // Touch screens don't use pointer lock -- skip entirely on Android.
     if (isAndroid()) return;
@@ -831,6 +851,36 @@ export function App(): JSX.Element {
     setSettings((prev) => ({ ...prev, [key]: value }));
     if (settingsLoaded) {
       await getPlatformApi().setSetting(key, value);
+    }
+  }, [settingsLoaded]);
+
+  // Handle touch gamepad per-element layout changes
+  const touchGamepadLayout: GamepadLayout = useMemo(() => parseLayout(settings.touchGamepadLayout), [settings.touchGamepadLayout]);
+
+  const handleTouchGamepadElementDrag = useCallback(
+    (id: GamepadElementId, x: number, y: number) => {
+      setSettings((prev) => {
+        const currentLayout = parseLayout(prev.touchGamepadLayout);
+        const nextLayout = { ...currentLayout, [id]: { x, y } };
+        const nextJson = JSON.stringify(nextLayout);
+
+        if (settingsLoaded) {
+          getPlatformApi().setSetting("touchGamepadLayout", nextJson);
+        }
+
+        return {
+          ...prev,
+          touchGamepadLayout: nextJson,
+        };
+      });
+    },
+    [settingsLoaded]
+  );
+
+  const resetTouchGamepadLayout = useCallback(async () => {
+    setSettings((prev) => ({ ...prev, touchGamepadLayout: "{}" }));
+    if (settingsLoaded) {
+      await getPlatformApi().setSetting("touchGamepadLayout", "{}");
     }
   }, [settingsLoaded]);
 
@@ -1301,6 +1351,13 @@ export function App(): JSX.Element {
     await handleStopStream();
   }, [handleStopStream, releasePointerLockIfNeeded, requestExitPrompt, streamStatus, streamingGame?.title]);
 
+  const handleToggleKeyboard = useCallback(() => {
+    if (!isAndroid()) {
+      return;
+    }
+    Keyboard.show().catch(() => {});
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1528,13 +1585,10 @@ export function App(): JSX.Element {
             streamWarning={streamWarning}
             isConnecting={streamStatus === "connecting"}
             gameTitle={streamingGame?.title ?? "Game"}
-            onToggleFullscreen={() => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => {});
-              } else {
-                document.documentElement.requestFullscreen().catch(() => {});
-              }
-            }}
+            showTouchGamepadToggle={shouldShowTouchGamepad}
+            touchGamepadHidden={touchGamepadHidden}
+            onToggleKeyboard={handleToggleKeyboard}
+            showKeyboardToggle={isAndroid()}
             onConfirmExit={handleExitPromptConfirm}
             onCancelExit={handleExitPromptCancel}
             onEndSession={() => {
@@ -1543,14 +1597,26 @@ export function App(): JSX.Element {
             onToggleMicrophone={() => {
               clientRef.current?.toggleMicrophone();
             }}
-          />
+            onToggleTouchGamepad={() => {
+              setTouchGamepadHidden((hidden) => !hidden);
+            }}
+            touchGamepadEditMode={touchGamepadEditMode}
+            onToggleTouchGamepadEditMode={() => {
+              setTouchGamepadEditMode((mode) => !mode);
+            }}
+            onResetTouchGamepadLayout={() => {
+              void resetTouchGamepadLayout();
+            }}
+          >
+            <TouchGamepad
+              clientRef={clientRef}
+              visible={shouldShowTouchGamepad && !touchGamepadHidden}
+              editMode={touchGamepadEditMode}
+              layout={touchGamepadLayout}
+              onElementDrag={handleTouchGamepadElementDrag}
+            />
+          </StreamView>
         )}
-
-        {/* On-screen gamepad -- only shown on Android while the stream is running */}
-        <TouchGamepad
-          clientRef={clientRef}
-          visible={isAndroid() && streamStatus === "streaming"}
-        />
 
         {streamStatus !== "streaming" && (
           <StreamLoading

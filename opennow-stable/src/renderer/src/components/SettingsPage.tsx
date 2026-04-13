@@ -1386,6 +1386,49 @@ export function SettingsPage({ settings, regions, onSettingChange, user, subscri
           </div>
         </section>
 
+        {/* ── Touch Controller (Android/Touch) ────────────── */}
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <h2>Touch Controller</h2>
+          </div>
+          <div className="settings-rows">
+            <div className="settings-row settings-row--column">
+              <div className="settings-row-top">
+                <label className="settings-label">
+                  Controller Layout
+                  <span className="settings-hint">
+                    Customize the on-screen controller position during an active stream. 
+                    Tap the move icon in the stream overlay to enter edit mode, then drag 
+                    any button freely to reposition it.
+                  </span>
+                </label>
+              </div>
+              <div className="settings-layout-info">
+                <div className="settings-layout-offset">
+                  <span>Layout:</span>
+                  <span className="settings-layout-value">
+                    {settings.touchGamepadLayout === "{}" || !settings.touchGamepadLayout
+                      ? "Default"
+                      : "Custom"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="settings-layout-reset-btn"
+                  onClick={() => {
+                    handleChange("touchGamepadLayout", "{}");
+                  }}
+                  disabled={
+                    settings.touchGamepadLayout === "{}" || !settings.touchGamepadLayout
+                  }
+                >
+                  Reset Layout
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── Region ────────────────────────────────────── */}
         <section className="settings-section">
           <div className="settings-section-header">

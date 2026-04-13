@@ -171,6 +171,7 @@ function buildCapacitorApi(): OpenNowApi {
           microphoneDeviceId: "", hideStreamButtons: false,
           sessionClockShowEveryMinutes: 60, sessionClockShowDurationSeconds: 30,
           windowWidth: 1400, windowHeight: 900,
+          touchGamepadLayout: "{}",
         } as any
       ),
     setSetting: (key, value) => callNativePlugin("setSetting", { key, value }),

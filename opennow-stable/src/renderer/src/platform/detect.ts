@@ -33,5 +33,5 @@ export function getPlatform(): Platform {
 export const PLATFORM: Platform = detectPlatform();
 
 export const isElectron = () => getPlatform() === "electron";
-export const isAndroid = () => getPlatform() === "capacitor";
+export const isAndroid = () => getPlatform() === "capacitor" || /android/i.test(navigator.userAgent);
 export const isWeb = () => getPlatform() === "web";

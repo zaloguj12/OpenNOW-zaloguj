@@ -49,6 +49,8 @@ export interface Settings {
   sessionClockShowDurationSeconds: number;
   windowWidth: number;
   windowHeight: number;
+  // Touch gamepad layout customization (JSON string of per-element offsets)
+  touchGamepadLayout: string;
 }
 
 export interface LoginProvider {
