@@ -72,6 +72,9 @@ dependencies {
     implementation "androidx.browser:browser:1.8.0"
     implementation "com.android.volley:volley:1.2.1"
 
+    // Native WebRTC — hardware H.264/H.265/AV1 decode via MediaCodec, bypasses WebView
+    implementation "io.github.webrtc-android:library:1.0.4"
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

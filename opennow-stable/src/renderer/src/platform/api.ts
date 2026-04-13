@@ -18,6 +18,7 @@ import type { OpenNowApi } from "@shared/gfn";
 import { createSession, pollSession, stopSession, getActiveSessions, claimSession } from "@main/gfn/cloudmatch";
 import { fetchMainGames, fetchLibraryGames, fetchPublicGames as fetchPublicGamesElectron, resolveLaunchAppId } from "@main/gfn/games";
 import { BrowserSignalingClient } from "./browserSignaling";
+import { isNativeStreamingAvailable, NativeStreamingBridge } from "./nativeStreaming";
 
 // Call a Capacitor native plugin method directly via the low-level bridge.
 // This bypasses registerPlugin() which behaves inconsistently across Capacitor versions.
@@ -87,6 +88,47 @@ function buildCapacitorApi(): OpenNowApi {
   const signalingListeners = new Set<Function>();
   const fullscreenListeners = new Set<Function>();
 
+  // Native streaming bridge — used when NativeStreamingPlugin is available.
+  // Replaces the browser WebRTC path with hardware-decoded video via MediaCodec.
+  let nativeBridge: NativeStreamingBridge | null = null;
+  // ICE servers from the last session — needed by the native bridge
+  let lastIceServers: any[] = [];
+
+  // When native streaming is active, intercept the signaling offer and handle
+  // the WebRTC exchange natively instead of forwarding to the browser stack.
+  async function handleNativeOffer(offerSdp: string): Promise<void> {
+    if (!nativeBridge) return;
+    try {
+      console.log("[NativeStreaming] Handling offer natively (HW decode path)");
+      const answerSdp = await nativeBridge.connect(offerSdp, lastIceServers);
+
+      // Forward local ICE candidates from the native layer back through signaling
+      nativeBridge.onEvent((event) => {
+        if (event.type === "iceCandidate" && event.candidate) {
+          browserSignaling?.sendIceCandidate({
+            candidate: event.candidate,
+            sdpMid: event.sdpMid ?? null,
+            sdpMLineIndex: event.sdpMLineIndex ?? null,
+          });
+        }
+        // Forward connection state changes to any renderer listeners
+        if (event.type === "connectionState" || event.type === "iceConnectionState") {
+          for (const cb of signalingListeners) {
+            cb({ type: "log", message: `[native] ${event.type}: ${event.state}` });
+          }
+        }
+      });
+
+      // Send the answer back through the existing signaling channel
+      browserSignaling?.sendAnswer({ sdp: answerSdp });
+      console.log("[NativeStreaming] Answer sent, native HW decode active");
+    } catch (err) {
+      console.error("[NativeStreaming] nativeConnect failed, falling back to browser WebRTC:", err);
+      // Propagate the offer to browser WebRTC listeners as a fallback
+      for (const cb of signalingListeners) cb({ type: "offer", sdp: offerSdp });
+    }
+  }
+
   return {
     getAuthSession: (input?) =>
       withTimeout(
@@ -120,12 +162,34 @@ function buildCapacitorApi(): OpenNowApi {
 
     connectSignaling: async (input) => {
       browserSignaling?.disconnect();
+      nativeBridge?.disconnect().catch(() => {});
+      nativeBridge = null;
+
+      // Capture ICE servers so the native bridge can use them when the offer arrives
+      lastIceServers = (input as any).iceServers ?? [];
+
+      // Initialise native bridge if the plugin is available
+      if (isNativeStreamingAvailable()) {
+        nativeBridge = new NativeStreamingBridge();
+        console.log("[NativeStreaming] Native HW decode path active");
+      }
+
       browserSignaling = new BrowserSignalingClient(
         (input as any).signalingServer,
         (input as any).sessionId,
         (input as any).signalingUrl,
       );
       browserSignaling.onEvent((event) => {
+        // Intercept the offer for native handling; pass everything else through
+        if (event.type === "offer" && nativeBridge) {
+          void handleNativeOffer(event.sdp);
+          return;
+        }
+        // For native ICE: forward remote candidates to the native peer connection
+        if (event.type === "remote-ice" && nativeBridge) {
+          nativeBridge.addIceCandidate(event.candidate).catch(() => {});
+          return;
+        }
         for (const cb of signalingListeners) cb(event);
       });
       await browserSignaling.connect();
@@ -133,6 +197,8 @@ function buildCapacitorApi(): OpenNowApi {
     disconnectSignaling: async () => {
       browserSignaling?.disconnect();
       browserSignaling = null;
+      await nativeBridge?.disconnect().catch(() => {});
+      nativeBridge = null;
     },
     sendAnswer: async (input) => {
       browserSignaling?.sendAnswer(input as any);

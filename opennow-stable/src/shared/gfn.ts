@@ -277,6 +277,8 @@ export interface SignalingConnectRequest {
   sessionId: string;
   signalingServer: string;
   signalingUrl?: string;
+  /** ICE servers from the session — used by the native streaming path on Android */
+  iceServers?: IceServer[];
 }
 
 export interface IceCandidatePayload {

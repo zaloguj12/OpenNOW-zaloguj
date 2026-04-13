@@ -1009,6 +1009,7 @@ export function App(): JSX.Element {
       sessionId: claimed.sessionId,
       signalingServer: claimed.signalingServer,
       signalingUrl: claimed.signalingUrl,
+      iceServers: claimed.iceServers,
     });
   }, [authSession, effectiveStreamingBaseUrl, settings]);
 
@@ -1187,6 +1188,7 @@ export function App(): JSX.Element {
         sessionId: sessionToConnect.sessionId,
         signalingServer: sessionToConnect.signalingServer,
         signalingUrl: sessionToConnect.signalingUrl,
+        iceServers: sessionToConnect.iceServers,
       });
     } catch (error) {
       console.error("Launch failed:", error);
