@@ -181,6 +181,94 @@ function buildCapacitorApi(): OpenNowApi {
   };
 }
 
+// --- Native Stream API (Android native WebRTC path) ---
+
+/**
+ * Start a native WebRTC stream, bypassing the WebView-based RTCPeerConnection.
+ * The Kotlin NativeStreamManager handles the PeerConnection, video rendering
+ * (SurfaceViewRenderer), and DataChannels natively.
+ *
+ * The answer is NOT returned directly — it arrives via the "nativeStreamAnswer"
+ * event which the caller must listen for and forward to signaling.
+ */
+export async function startNativeStream(params: {
+  offerSdp: string;
+  serverIp: string;
+  mediaConnectionIp?: string;
+  mediaConnectionPort: number;
+  iceServers: string; // JSON stringified array
+  codec: string;
+  colorQuality: string;
+  resolution: string;
+  fps: number;
+  maxBitrateKbps: number;
+  signalingServer: string;
+}): Promise<void> {
+  await callCapacitor("GfnPlugin", "startNativeStream", params);
+}
+
+/**
+ * Stop the native stream and tear down the PeerConnection.
+ */
+export async function stopNativeStream(): Promise<void> {
+  await callCapacitor("GfnPlugin", "stopNativeStream", {});
+}
+
+/**
+ * Forward a trickle ICE candidate from signaling to the native PeerConnection.
+ */
+export async function addNativeIceCandidate(candidate: {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+}): Promise<void> {
+  await callCapacitor("GfnPlugin", "addNativeIceCandidate", candidate);
+}
+
+/**
+ * Send input to the native DataChannel.
+ * Used by the touch gamepad overlay to send encoded input.
+ */
+export async function sendNativeInput(input: Record<string, unknown>): Promise<void> {
+  await callCapacitor("GfnPlugin", "sendNativeInput", input);
+}
+
+/**
+ * Get the current state and diagnostics from the native stream manager.
+ */
+export async function getNativeStreamState(): Promise<{
+  state: string;
+  inputReady: boolean;
+  connectionState: string;
+  bitrateKbps: number;
+  rttMs: number;
+}> {
+  return callCapacitor("GfnPlugin", "getNativeStreamState", {});
+}
+
+/**
+ * Listen for events emitted by the native stream manager.
+ * Events:
+ *   - "nativeStreamAnswer": { sdp: string, nvstSdp: string }
+ *   - "nativeIceCandidate": { candidate: string, sdpMid: string, sdpMLineIndex: number }
+ *   - "nativeStreamError": { error: string }
+ */
+export function addNativeStreamListener(
+  eventName: string,
+  callback: (data: any) => void,
+): (() => void) | undefined {
+  const cap = (window as any).Capacitor;
+  if (!cap) return undefined;
+
+  // Capacitor plugin event listener
+  const pluginHandle = cap.Plugins?.GfnPlugin;
+  if (pluginHandle?.addListener) {
+    const handle = pluginHandle.addListener(eventName, callback);
+    return () => handle?.remove?.();
+  }
+  return undefined;
+}
+
 // --- Exported singleton ---
 
 let _api: OpenNowApi | null = null;
@@ -212,3 +300,4 @@ export function getPlatformApi(): OpenNowApi {
 
   return _api;
 }
+

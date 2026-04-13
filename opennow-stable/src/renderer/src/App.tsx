@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { getPlatformApi } from "./platform/index";
+import {
+  startNativeStream,
+  stopNativeStream,
+  addNativeIceCandidate,
+  addNativeStreamListener,
+  getNativeStreamState,
+} from "./platform/api";
 import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
 import { TouchGamepad, parseLayout } from "./components/TouchGamepad";
 import type { GamepadElementId, GamepadLayout } from "./components/TouchGamepad";
@@ -745,6 +752,38 @@ export function App(): JSX.Element {
 
   // Signaling events
   useEffect(() => {
+    // ── Native stream event listeners (Android only) ──────────────────
+    // These handle the answer/ICE/error events emitted by the Kotlin
+    // NativeStreamManager and forward them back through BrowserSignalingClient.
+    const useNativePath = isAndroid();
+    const nativeCleanups: Array<(() => void) | undefined> = [];
+
+    if (useNativePath) {
+      nativeCleanups.push(
+        addNativeStreamListener("nativeStreamAnswer", (data: any) => {
+          console.log("[App] Native stream answer received, forwarding to signaling");
+          getPlatformApi().sendAnswer({ sdp: data.sdp, nvstSdp: data.nvstSdp }).catch((e: any) =>
+            console.error("[App] Failed to send native answer:", e)
+          );
+        })
+      );
+      nativeCleanups.push(
+        addNativeStreamListener("nativeIceCandidate", (data: any) => {
+          console.log("[App] Native ICE candidate, forwarding to signaling");
+          getPlatformApi().sendIceCandidate({
+            candidate: data.candidate,
+            sdpMid: data.sdpMid,
+            sdpMLineIndex: data.sdpMLineIndex,
+          }).catch((e: any) => console.error("[App] Failed to send native ICE:", e));
+        })
+      );
+      nativeCleanups.push(
+        addNativeStreamListener("nativeStreamError", (data: any) => {
+          console.error("[App] Native stream error:", data.error);
+        })
+      );
+    }
+
     const unsubscribe = getPlatformApi().onSignalingEvent(async (event: MainToRendererSignalingEvent) => {
       console.log(`[App] Signaling event: ${event.type}`, event.type === "offer" ? `(SDP ${event.sdp.length} chars)` : "", event.type === "remote-ice" ? event.candidate : "");
       try {
@@ -762,6 +801,59 @@ export function App(): JSX.Element {
             iceServersCount: activeSession.iceServers?.length,
           }));
 
+          // ── NATIVE PATH (Android) ──────────────────────────────────
+          // Route the WebRTC offer to the native Kotlin NativeStreamManager
+          // which handles PeerConnection, video rendering (SurfaceViewRenderer),
+          // and input DataChannels natively — bypassing WebView overhead.
+          if (useNativePath) {
+            console.log("[App] Using NATIVE WebRTC path (Android)");
+            try {
+              await startNativeStream({
+                offerSdp: event.sdp,
+                serverIp: activeSession.serverIp || "",
+                mediaConnectionIp: activeSession.mediaConnectionInfo?.ip,
+                mediaConnectionPort: activeSession.mediaConnectionInfo?.port || 0,
+                iceServers: JSON.stringify(activeSession.iceServers || []),
+                codec: settings.codec,
+                colorQuality: settings.colorQuality,
+                resolution: settings.resolution,
+                fps: settings.fps,
+                maxBitrateKbps: settings.maxBitrateMbps * 1000,
+                signalingServer: activeSession.signalingServer || "",
+              });
+              setLaunchError(null);
+              setStreamStatus("streaming");
+              setSessionStartedAtMs((current) => current ?? Date.now());
+              console.log("[App] Native stream started successfully");
+
+              // Start polling native stream state for diagnostics
+              const statsPollTimer = window.setInterval(async () => {
+                try {
+                  const state = await getNativeStreamState();
+                  setDiagnostics((prev) => ({
+                    ...prev,
+                    connectionState: state.connectionState,
+                    inputReady: state.inputReady,
+                    bitrateKbps: state.bitrateKbps || prev.bitrateKbps,
+                    rttMs: state.rttMs || prev.rttMs,
+                  }));
+                } catch {
+                  // Ignore polling errors
+                }
+              }, 1000);
+              // Store timer so it can be cleared on cleanup
+              nativeCleanups.push(() => window.clearInterval(statsPollTimer));
+            } catch (e) {
+              console.error("[App] Native stream start failed:", e);
+              setLaunchError({
+                message: `Native stream failed: ${e instanceof Error ? e.message : String(e)}`,
+                step: "connecting",
+              });
+            }
+            return;
+          }
+
+          // ── JS PATH (Electron / fallback) ──────────────────────────
           if (!clientRef.current && videoRef.current && audioRef.current) {
             clientRef.current = new GfnWebRtcClient({
               videoElement: videoRef.current,
@@ -810,20 +902,38 @@ export function App(): JSX.Element {
             }
           }
         } else if (event.type === "remote-ice") {
-          await clientRef.current?.addRemoteCandidate(event.candidate);
+          // Forward remote ICE candidates to the appropriate path
+          if (useNativePath) {
+            await addNativeIceCandidate(event.candidate);
+          } else {
+            await clientRef.current?.addRemoteCandidate(event.candidate);
+          }
         } else if (event.type === "disconnected") {
           console.warn("Signaling disconnected:", event.reason);
           // On Android/WebView, the GFN server closes the signaling WebSocket
           // after the offer/answer exchange completes -- this is normal and does
           // NOT mean the stream ended. Only tear down if we are not yet streaming.
-          if (clientRef.current?.isStreaming?.()) {
+          if (useNativePath) {
+            // Native path: check native stream state
+            try {
+              const nativeState = await getNativeStreamState();
+              if (nativeState.state === "connected" || nativeState.state === "connecting") {
+                console.warn("[App] Signaling closed after native stream established -- ignoring");
+                return;
+              }
+            } catch { /* ignore */ }
+          } else if (clientRef.current?.isStreaming?.()) {
             console.warn("[App] Signaling closed after stream established -- ignoring (WebRTC media still active)");
             return;
           }
           touchHandlerRef.current?.dispose();
           touchHandlerRef.current = null;
-          clientRef.current?.dispose();
-          clientRef.current = null;
+          if (useNativePath) {
+            stopNativeStream().catch(() => {});
+          } else {
+            clientRef.current?.dispose();
+            clientRef.current = null;
+          }
           setStreamStatus("idle");
           setSession(null);
           setStreamingGame(null);
@@ -842,7 +952,10 @@ export function App(): JSX.Element {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      for (const cleanup of nativeCleanups) cleanup?.();
+    };
   }, [settings]);
 
   // Save settings when changed

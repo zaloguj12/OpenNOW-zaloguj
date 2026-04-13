@@ -1246,4 +1246,273 @@ class GfnPlugin : Plugin() {
             builder.show()
         }
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // Native Streaming Bridge
+    // ──────────────────────────────────────────────────────────────
+
+    private fun getNativeStreamManager(): NativeStreamManager? {
+        return (activity as? MainActivity)?.nativeStreamManager
+    }
+
+    /**
+     * Start a native WebRTC stream.
+     *
+     * Expected args:
+     *   offerSdp: string       -- the SDP offer from signaling
+     *   serverIp: string       -- session server IP
+     *   mediaConnectionIp: string?  -- optional media endpoint IP
+     *   mediaConnectionPort: number -- media endpoint port
+     *   iceServers: string     -- JSON array of ICE server objects
+     *   codec: string          -- "H264", "H265", "AV1", etc.
+     *   colorQuality: string   -- "8bit_420", "10bit_420", etc.
+     *   resolution: string     -- "1920x1080"
+     *   fps: number
+     *   maxBitrateKbps: number
+     *   signalingServer: string
+     *
+     * The answer SDP + nvstSdp are returned to the JS side which sends them
+     * via the BrowserSignalingClient.
+     */
+    @PluginMethod
+    fun startNativeStream(call: PluginCall) {
+        val manager = getNativeStreamManager() ?: run {
+            call.reject("NativeStreamManager not available")
+            return
+        }
+
+        val offerSdp = call.getString("offerSdp") ?: run {
+            call.reject("Missing offerSdp")
+            return
+        }
+        val serverIp = call.getString("serverIp") ?: ""
+        val mediaConnectionIp = call.getString("mediaConnectionIp")
+        val mediaConnectionPort = call.getInt("mediaConnectionPort") ?: 0
+        val codec = call.getString("codec") ?: "H264"
+        val colorQuality = call.getString("colorQuality") ?: "8bit_420"
+        val resolution = call.getString("resolution") ?: "1920x1080"
+        val fps = call.getInt("fps") ?: 60
+        val maxBitrateKbps = call.getInt("maxBitrateKbps") ?: 75000
+        val signalingServer = call.getString("signalingServer") ?: ""
+
+        // Parse ICE servers from JSON string
+        val iceServersList = mutableListOf<org.webrtc.PeerConnection.IceServer>()
+        try {
+            val iceServersJson = call.getString("iceServers") ?: "[]"
+            val arr = org.json.JSONArray(iceServersJson)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val urlsArr = obj.optJSONArray("urls") ?: continue
+                val urls = mutableListOf<String>()
+                for (j in 0 until urlsArr.length()) {
+                    urls.add(urlsArr.getString(j))
+                }
+                val builder = org.webrtc.PeerConnection.IceServer.builder(urls)
+                obj.optString("username", "").takeIf { it.isNotEmpty() }?.let { builder.setUsername(it) }
+                obj.optString("credential", "").takeIf { it.isNotEmpty() }?.let { builder.setPassword(it) }
+                iceServersList.add(builder.createIceServer())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("GfnPlugin", "Failed to parse ICE servers: ${e.message}")
+        }
+
+        // Handle the offer on a background thread, resolve immediately with "started"
+        scope.launch {
+            try {
+                manager.handleOffer(
+                    offerSdp = offerSdp,
+                    serverIp = serverIp,
+                    mediaConnectionIp = mediaConnectionIp,
+                    mediaConnectionPort = mediaConnectionPort,
+                    iceServers = iceServersList,
+                    codec = codec,
+                    colorQuality = colorQuality,
+                    resolution = resolution,
+                    fps = fps,
+                    maxBitrateKbps = maxBitrateKbps,
+                    signalingServer = signalingServer,
+                    onAnswer = { sdp, nvstSdp ->
+                        // Emit the answer to the JS side so BrowserSignalingClient can send it
+                        val event = JSObject()
+                        event.put("sdp", sdp)
+                        event.put("nvstSdp", nvstSdp)
+                        notifyListeners("nativeStreamAnswer", event)
+                    },
+                    onIceCandidate = { candidate, sdpMid, sdpMLineIndex ->
+                        val event = JSObject()
+                        event.put("candidate", candidate)
+                        event.put("sdpMid", sdpMid)
+                        event.put("sdpMLineIndex", sdpMLineIndex)
+                        notifyListeners("nativeIceCandidate", event)
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("GfnPlugin", "startNativeStream failed: ${e.message}")
+                val event = JSObject()
+                event.put("error", e.message ?: "unknown error")
+                notifyListeners("nativeStreamError", event)
+            }
+        }
+
+        // Return immediately — the answer comes via the "nativeStreamAnswer" event
+        val result = JSObject()
+        result.put("status", "started")
+        call.resolve(result)
+    }
+
+    /**
+     * Stop the native stream and tear down the PeerConnection.
+     */
+    @PluginMethod
+    fun stopNativeStream(call: PluginCall) {
+        val manager = getNativeStreamManager()
+        if (manager != null && manager.isStreaming()) {
+            scope.launch {
+                manager.dispose()
+                // Re-initialize for next session
+                activity.runOnUiThread {
+                    val mainActivity = activity as? MainActivity
+                    mainActivity?.nativeSurfaceView?.let { sv ->
+                        val newManager = NativeStreamManager(activity)
+                        newManager.initialize(sv)
+                        mainActivity.let {
+                            // The manager reference is updated via the existing property
+                        }
+                    }
+                    mainActivity?.hideNativeVideoSurface()
+                }
+            }
+        }
+        call.resolve(JSObject().also { it.put("status", "stopped") })
+    }
+
+    /**
+     * Forward a trickle ICE candidate from signaling to the native PeerConnection.
+     *
+     * Args:
+     *   candidate: string
+     *   sdpMid: string?
+     *   sdpMLineIndex: number?
+     */
+    @PluginMethod
+    fun addNativeIceCandidate(call: PluginCall) {
+        val manager = getNativeStreamManager() ?: run {
+            call.reject("NativeStreamManager not available")
+            return
+        }
+        val candidate = call.getString("candidate") ?: run {
+            call.reject("Missing candidate")
+            return
+        }
+        val sdpMid = call.getString("sdpMid")
+        val sdpMLineIndex = call.getInt("sdpMLineIndex")
+
+        manager.addRemoteCandidate(candidate, sdpMid, sdpMLineIndex)
+        call.resolve()
+    }
+
+    /**
+     * Send input data to the native DataChannel.
+     *
+     * This is used by the touch gamepad overlay in the WebView to send
+     * encoded input bytes to the native reliable/PR data channels.
+     *
+     * Args:
+     *   type: string     -- "keyDown" | "keyUp" | "mouseMove" | "mouseDown" | "mouseUp" | "mouseWheel" | "gamepad"
+     *   ... type-specific args (keycode, dx, dy, button, etc.)
+     */
+    @PluginMethod
+    fun sendNativeInput(call: PluginCall) {
+        val manager = getNativeStreamManager() ?: return
+        val type = call.getString("type") ?: return
+
+        when (type) {
+            "keyDown" -> {
+                val keycode = call.getInt("keycode") ?: return
+                val scancode = call.getInt("scancode") ?: 0
+                val modifiers = call.getInt("modifiers") ?: 0
+                manager.sendKeyDown(keycode, scancode, modifiers)
+            }
+            "keyUp" -> {
+                val keycode = call.getInt("keycode") ?: return
+                val scancode = call.getInt("scancode") ?: 0
+                val modifiers = call.getInt("modifiers") ?: 0
+                manager.sendKeyUp(keycode, scancode, modifiers)
+            }
+            "mouseMove" -> {
+                val dx = call.getInt("dx") ?: 0
+                val dy = call.getInt("dy") ?: 0
+                manager.sendMouseMove(dx, dy)
+            }
+            "mouseDown" -> {
+                val button = call.getInt("button") ?: 1
+                manager.sendMouseButtonDown(button)
+            }
+            "mouseUp" -> {
+                val button = call.getInt("button") ?: 1
+                manager.sendMouseButtonUp(button)
+            }
+            "mouseWheel" -> {
+                val delta = call.getInt("delta") ?: 0
+                manager.sendMouseWheel(delta)
+            }
+            "gamepadButton" -> {
+                // Send a gamepad button press/release
+                val xinputFlag = call.getInt("xinputFlag") ?: return
+                val pressed = call.getBoolean("pressed") ?: return
+                // Get current state from manager or build fresh
+                val controllerId = call.getInt("controllerId") ?: 0
+                val buttons = call.getInt("buttons") ?: 0
+                val lt = call.getInt("leftTrigger") ?: 0
+                val rt = call.getInt("rightTrigger") ?: 0
+                val lx = call.getInt("leftStickX") ?: 0
+                val ly = call.getInt("leftStickY") ?: 0
+                val rx = call.getInt("rightStickX") ?: 0
+                val ry = call.getInt("rightStickY") ?: 0
+                val bitmap = call.getInt("bitmap") ?: 1
+                manager.sendGamepadState(controllerId, buttons, lt, rt, lx, ly, rx, ry, bitmap)
+            }
+            "gamepadState" -> {
+                val controllerId = call.getInt("controllerId") ?: 0
+                val buttons = call.getInt("buttons") ?: 0
+                val lt = call.getInt("leftTrigger") ?: 0
+                val rt = call.getInt("rightTrigger") ?: 0
+                val lx = call.getInt("leftStickX") ?: 0
+                val ly = call.getInt("leftStickY") ?: 0
+                val rx = call.getInt("rightStickX") ?: 0
+                val ry = call.getInt("rightStickY") ?: 0
+                val bitmap = call.getInt("bitmap") ?: 1
+                manager.sendGamepadState(controllerId, buttons, lt, rt, lx, ly, rx, ry, bitmap)
+            }
+        }
+        call.resolve()
+    }
+
+    /**
+     * Get the current native stream state and diagnostics.
+     */
+    @PluginMethod
+    fun getNativeStreamState(call: PluginCall) {
+        val manager = getNativeStreamManager()
+        val result = JSObject()
+        if (manager == null) {
+            result.put("state", "unavailable")
+            call.resolve(result)
+            return
+        }
+
+        result.put("state", manager.state.name.lowercase())
+        result.put("inputReady", manager.inputReady)
+        result.put("connectionState", manager.diagnostics.connectionState)
+        result.put("resolution", manager.diagnostics.resolution)
+        result.put("codec", manager.diagnostics.codec)
+        result.put("bitrateKbps", manager.diagnostics.bitrateKbps)
+        result.put("rttMs", manager.diagnostics.rttMs)
+        result.put("packetsLost", manager.diagnostics.packetsLost)
+        result.put("packetsReceived", manager.diagnostics.packetsReceived)
+        result.put("framesDecoded", manager.diagnostics.framesDecoded)
+        result.put("framesDropped", manager.diagnostics.framesDropped)
+        call.resolve(result)
+    }
 }
+
