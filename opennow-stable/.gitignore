@@ -46,3 +46,9 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# Additional generated output
+coverage/
+.turbo/
+*.apk
+*.aab

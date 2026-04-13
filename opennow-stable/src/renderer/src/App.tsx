@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+import { Keyboard } from "@capacitor/keyboard";
 
 import { getPlatformApi } from "./platform/index";
 import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
@@ -1350,6 +1351,13 @@ export function App(): JSX.Element {
     await handleStopStream();
   }, [handleStopStream, releasePointerLockIfNeeded, requestExitPrompt, streamStatus, streamingGame?.title]);
 
+  const handleToggleKeyboard = useCallback(() => {
+    if (!isAndroid()) {
+      return;
+    }
+    Keyboard.show().catch(() => {});
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1579,13 +1587,8 @@ export function App(): JSX.Element {
             gameTitle={streamingGame?.title ?? "Game"}
             showTouchGamepadToggle={shouldShowTouchGamepad}
             touchGamepadHidden={touchGamepadHidden}
-            onToggleFullscreen={() => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => {});
-              } else {
-                document.documentElement.requestFullscreen().catch(() => {});
-              }
-            }}
+            onToggleKeyboard={handleToggleKeyboard}
+            showKeyboardToggle={isAndroid()}
             onConfirmExit={handleExitPromptConfirm}
             onCancelExit={handleExitPromptCancel}
             onEndSession={() => {
