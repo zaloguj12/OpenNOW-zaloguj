@@ -314,42 +314,41 @@ class NativeStreamManager(private val context: Context) {
                             override fun onSetSuccess() {
                                 log("Local description set")
 
-                                // Wait briefly for ICE gathering then send answer
-                                scheduler.schedule({
-                                    val finalSdp = pc.localDescription?.description ?: mungedSdp
-                                    log("Final SDP length=${finalSdp.length}")
+                                // Send answer immediately — ICE candidates are trickled
+                                // via continualGatheringPolicy=GATHER_CONTINUALLY
+                                val finalSdp = pc.localDescription?.description ?: mungedSdp
+                                log("Final SDP length=${finalSdp.length}")
 
-                                    // Build nvstSdp
-                                    val res = NativeSdpUtils.parseResolution(resolution)
-                                    val credentials = NativeSdpUtils.extractIceCredentials(finalSdp)
-                                    val nvstSdp = NativeSdpUtils.buildNvstSdp(
-                                        width = res.width,
-                                        height = res.height,
-                                        fps = fps,
-                                        maxBitrateKbps = maxBitrateKbps,
-                                        partialReliableThresholdMs = partialReliableThresholdMs,
-                                        codec = codec,
-                                        colorQuality = colorQuality,
-                                        credentials = credentials
-                                    )
+                                // Build nvstSdp
+                                val res = NativeSdpUtils.parseResolution(resolution)
+                                val credentials = NativeSdpUtils.extractIceCredentials(finalSdp)
+                                val nvstSdp = NativeSdpUtils.buildNvstSdp(
+                                    width = res.width,
+                                    height = res.height,
+                                    fps = fps,
+                                    maxBitrateKbps = maxBitrateKbps,
+                                    partialReliableThresholdMs = partialReliableThresholdMs,
+                                    codec = codec,
+                                    colorQuality = colorQuality,
+                                    credentials = credentials
+                                )
 
-                                    onAnswer(finalSdp, nvstSdp)
-                                    log("Answer + nvstSdp sent via signaling")
+                                onAnswer(finalSdp, nvstSdp)
+                                log("Answer + nvstSdp sent via signaling")
 
-                                    // Inject manual ICE candidate from mediaConnectionInfo
-                                    if (!mediaConnectionIp.isNullOrBlank() && mediaConnectionPort > 0) {
-                                        val ip = NativeSdpUtils.extractPublicIp(mediaConnectionIp)
-                                        if (ip != null) {
-                                            injectManualIceCandidate(pc, ip, mediaConnectionPort, serverIceUfrag)
-                                        }
+                                // Inject manual ICE candidate from mediaConnectionInfo
+                                if (!mediaConnectionIp.isNullOrBlank() && mediaConnectionPort > 0) {
+                                    val ip = NativeSdpUtils.extractPublicIp(mediaConnectionIp)
+                                    if (ip != null) {
+                                        injectManualIceCandidate(pc, ip, mediaConnectionPort, serverIceUfrag)
                                     }
+                                }
 
-                                    // Start heartbeat + stats
-                                    startHeartbeat()
-                                    startStatsCollection()
+                                // Start heartbeat + stats
+                                startHeartbeat()
+                                startStatsCollection()
 
-                                    log("=== handleOffer COMPLETE ===")
-                                }, 2, TimeUnit.SECONDS) // 2s for ICE gathering
+                                log("=== handleOffer COMPLETE ===")
                             }
                             override fun onSetFailure(error: String) {
                                 log("ERROR: Set local description failed: $error")

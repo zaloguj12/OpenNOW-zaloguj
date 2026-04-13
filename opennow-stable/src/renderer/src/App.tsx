@@ -6,7 +6,6 @@ import {
   startNativeStream,
   stopNativeStream,
   addNativeIceCandidate,
-  addNativeStreamListener,
   getNativeStreamState,
 } from "./platform/api";
 import { isAndroid } from "./platform/detect";  // isAndroid is now a function -- call it as isAndroid()
@@ -752,37 +751,8 @@ export function App(): JSX.Element {
 
   // Signaling events
   useEffect(() => {
-    // ── Native stream event listeners (Android only) ──────────────────
-    // These handle the answer/ICE/error events emitted by the Kotlin
-    // NativeStreamManager and forward them back through BrowserSignalingClient.
     const useNativePath = isAndroid();
     const nativeCleanups: Array<(() => void) | undefined> = [];
-
-    if (useNativePath) {
-      nativeCleanups.push(
-        addNativeStreamListener("nativeStreamAnswer", (data: any) => {
-          console.log("[App] Native stream answer received, forwarding to signaling");
-          getPlatformApi().sendAnswer({ sdp: data.sdp, nvstSdp: data.nvstSdp }).catch((e: any) =>
-            console.error("[App] Failed to send native answer:", e)
-          );
-        })
-      );
-      nativeCleanups.push(
-        addNativeStreamListener("nativeIceCandidate", (data: any) => {
-          console.log("[App] Native ICE candidate, forwarding to signaling");
-          getPlatformApi().sendIceCandidate({
-            candidate: data.candidate,
-            sdpMid: data.sdpMid,
-            sdpMLineIndex: data.sdpMLineIndex,
-          }).catch((e: any) => console.error("[App] Failed to send native ICE:", e));
-        })
-      );
-      nativeCleanups.push(
-        addNativeStreamListener("nativeStreamError", (data: any) => {
-          console.error("[App] Native stream error:", data.error);
-        })
-      );
-    }
 
     const unsubscribe = getPlatformApi().onSignalingEvent(async (event: MainToRendererSignalingEvent) => {
       console.log(`[App] Signaling event: ${event.type}`, event.type === "offer" ? `(SDP ${event.sdp.length} chars)` : "", event.type === "remote-ice" ? event.candidate : "");
@@ -808,7 +778,9 @@ export function App(): JSX.Element {
           if (useNativePath) {
             console.log("[App] Using NATIVE WebRTC path (Android)");
             try {
-              await startNativeStream({
+              // startNativeStream keeps the PluginCall open until the
+              // native answer SDP is ready, then returns it directly.
+              const result = await startNativeStream({
                 offerSdp: event.sdp,
                 serverIp: activeSession.serverIp || "",
                 mediaConnectionIp: activeSession.mediaConnectionInfo?.ip,
@@ -821,6 +793,13 @@ export function App(): JSX.Element {
                 maxBitrateKbps: settings.maxBitrateMbps * 1000,
                 signalingServer: activeSession.signalingServer || "",
               });
+
+              // Forward the answer SDP back to signaling
+              if (result.sdp) {
+                console.log("[App] Native answer received, forwarding to signaling");
+                await getPlatformApi().sendAnswer({ sdp: result.sdp, nvstSdp: result.nvstSdp });
+              }
+
               setLaunchError(null);
               setStreamStatus("streaming");
               setSessionStartedAtMs((current) => current ?? Date.now());
@@ -841,7 +820,6 @@ export function App(): JSX.Element {
                   // Ignore polling errors
                 }
               }, 1000);
-              // Store timer so it can be cleared on cleanup
               nativeCleanups.push(() => window.clearInterval(statsPollTimer));
             } catch (e) {
               console.error("[App] Native stream start failed:", e);

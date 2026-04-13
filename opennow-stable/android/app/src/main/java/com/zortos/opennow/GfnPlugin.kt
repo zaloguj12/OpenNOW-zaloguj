@@ -1316,7 +1316,10 @@ class GfnPlugin : Plugin() {
             android.util.Log.e("GfnPlugin", "Failed to parse ICE servers: ${e.message}")
         }
 
-        // Handle the offer on a background thread, resolve immediately with "started"
+        // Keep the PluginCall open — we resolve it when the answer is ready.
+        // This avoids the unreliable Capacitor event listener path.
+        call.setKeepAlive(true)
+
         scope.launch {
             try {
                 manager.handleOffer(
@@ -1332,11 +1335,12 @@ class GfnPlugin : Plugin() {
                     maxBitrateKbps = maxBitrateKbps,
                     signalingServer = signalingServer,
                     onAnswer = { sdp, nvstSdp ->
-                        // Emit the answer to the JS side so BrowserSignalingClient can send it
-                        val event = JSObject()
-                        event.put("sdp", sdp)
-                        event.put("nvstSdp", nvstSdp)
-                        notifyListeners("nativeStreamAnswer", event)
+                        // Resolve the kept-alive call with the answer SDP
+                        val result = JSObject()
+                        result.put("status", "answered")
+                        result.put("sdp", sdp)
+                        result.put("nvstSdp", nvstSdp)
+                        call.resolve(result)
                     },
                     onIceCandidate = { candidate, sdpMid, sdpMLineIndex ->
                         val event = JSObject()
@@ -1348,16 +1352,9 @@ class GfnPlugin : Plugin() {
                 )
             } catch (e: Exception) {
                 android.util.Log.e("GfnPlugin", "startNativeStream failed: ${e.message}")
-                val event = JSObject()
-                event.put("error", e.message ?: "unknown error")
-                notifyListeners("nativeStreamError", event)
+                call.reject("Native stream failed: ${e.message}")
             }
         }
-
-        // Return immediately — the answer comes via the "nativeStreamAnswer" event
-        val result = JSObject()
-        result.put("status", "started")
-        call.resolve(result)
     }
 
     /**

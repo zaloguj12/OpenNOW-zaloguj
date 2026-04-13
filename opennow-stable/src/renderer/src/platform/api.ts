@@ -188,8 +188,8 @@ function buildCapacitorApi(): OpenNowApi {
  * The Kotlin NativeStreamManager handles the PeerConnection, video rendering
  * (SurfaceViewRenderer), and DataChannels natively.
  *
- * The answer is NOT returned directly — it arrives via the "nativeStreamAnswer"
- * event which the caller must listen for and forward to signaling.
+ * Returns the answer SDP + nvstSdp once the native PeerConnection creates them.
+ * The PluginCall stays open on the Kotlin side until the answer is ready.
  */
 export async function startNativeStream(params: {
   offerSdp: string;
@@ -203,8 +203,8 @@ export async function startNativeStream(params: {
   fps: number;
   maxBitrateKbps: number;
   signalingServer: string;
-}): Promise<void> {
-  await callCapacitor("GfnPlugin", "startNativeStream", params);
+}): Promise<{ status: string; sdp?: string; nvstSdp?: string }> {
+  return callCapacitor("GfnPlugin", "startNativeStream", params);
 }
 
 /**
