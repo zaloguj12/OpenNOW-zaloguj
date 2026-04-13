@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { JSX, ReactNode } from "react";
-import { Maximize, Minimize, Gamepad2, Loader2, LogOut, Clock3, AlertTriangle, Mic, MicOff, Eye, EyeOff, Move, RotateCcw } from "lucide-react";
+import { Gamepad2, Keyboard, Loader2, LogOut, Clock3, AlertTriangle, Mic, MicOff, Eye, EyeOff, Move, RotateCcw } from "lucide-react";
 import type { StreamDiagnostics } from "../gfn/webrtcClient";
 
 interface StreamViewProps {
@@ -41,7 +41,7 @@ interface StreamViewProps {
   showTouchGamepadToggle?: boolean;
   touchGamepadHidden?: boolean;
   touchGamepadEditMode?: boolean;
-  onToggleFullscreen: () => void;
+  showKeyboardToggle?: boolean;
   onConfirmExit: () => void;
   onCancelExit: () => void;
   onEndSession: () => void;
@@ -49,6 +49,7 @@ interface StreamViewProps {
   onToggleTouchGamepad?: () => void;
   onToggleTouchGamepadEditMode?: () => void;
   onResetTouchGamepadLayout?: () => void;
+  onToggleKeyboard?: () => void;
 }
 
 function getRttColor(rttMs: number): string {
@@ -122,7 +123,7 @@ export function StreamView({
   showTouchGamepadToggle = false,
   touchGamepadHidden = false,
   touchGamepadEditMode = false,
-  onToggleFullscreen,
+  showKeyboardToggle = false,
   onConfirmExit,
   onCancelExit,
   onEndSession,
@@ -130,9 +131,9 @@ export function StreamView({
   onToggleTouchGamepad,
   onToggleTouchGamepadEditMode,
   onResetTouchGamepadLayout,
+  onToggleKeyboard,
   hideStreamButtons = false,
 }: StreamViewProps): JSX.Element {
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHints, setShowHints] = useState(true);
   const [showSessionClock, setShowSessionClock] = useState(false);
   const [statsCollapsed, setStatsCollapsed] = useState(false);
@@ -143,21 +144,9 @@ export function StreamView({
   const hasMicrophone = micState === "started" || micState === "stopped";
   const showMicIndicator = hasMicrophone && !isConnecting && !hideStreamButtons;
 
-  const handleFullscreenToggle = useCallback(() => {
-    onToggleFullscreen();
-  }, [onToggleFullscreen]);
-
   useEffect(() => {
     const timer = setTimeout(() => setShowHints(false), 5000);
     return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -511,15 +500,15 @@ export function StreamView({
         </button>
       )}
 
-      {/* Fullscreen toggle */}
-      {!hideStreamButtons && (
+      {/* Keyboard toggle button */}
+      {!hideStreamButtons && !isConnecting && showKeyboardToggle && onToggleKeyboard && (
         <button
-          className="sv-fs"
-          onClick={handleFullscreenToggle}
-          title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          className="sv-kb"
+          onClick={onToggleKeyboard}
+          title="Show keyboard"
+          aria-label="Show keyboard"
         >
-          {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+          <Keyboard size={18} />
         </button>
       )}
 
