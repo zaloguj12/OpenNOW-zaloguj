@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "npm --prefix opennow-stable run dev",
     "build": "npm --prefix opennow-stable run build",
+    "build:web": "npm --prefix opennow-stable run build:web",
+    "cap:sync:android": "npm --prefix opennow-stable run cap:sync:android",
+    "cap:open:android": "npm --prefix opennow-stable run cap:open:android",
     "typecheck": "npm --prefix opennow-stable run typecheck",
     "dist": "npm --prefix opennow-stable run dist",
     "dist:signed": "npm --prefix opennow-stable run dist:signed"

@@ -1,0 +1,9 @@
+{
+  "appId": "com.zortos.opennow",
+  "appName": "OpenNOW",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
