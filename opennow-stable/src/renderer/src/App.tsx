@@ -163,6 +163,8 @@ type LaunchErrorState = {
   title: string;
   description: string;
   codeLabel?: string;
+  debugDetails?: string[];
+  occurredAtIso: string;
 };
 type QueueAdCancelReason = "error" | "other";
 type QueueAdErrorInfo = "Ad play timeout" | "Ad video is stuck" | "Error loading url";
@@ -250,7 +252,7 @@ function isSessionInQueue(session: SessionInfo): boolean {
 
 function isNumericId(value: string | undefined): value is string {
   if (!value) return false;
-  return /^\d+$/.test(value);
+  return /^\d+$/.test(value) && Number.parseInt(value, 10) > 0;
 }
 
 function parseNumericId(value: string | undefined): number | null {
@@ -731,8 +733,49 @@ function extractLaunchErrorCode(error: unknown): number | undefined {
   return undefined;
 }
 
+function compactDebugValue(value: unknown, limit = 12000): string | null {
+  if (value == null) return null;
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return trimmed.length > limit ? `${trimmed.slice(0, limit)}...` : trimmed;
+}
+
+function extractLaunchErrorDebugDetails(error: unknown): string[] {
+  if (!error || typeof error !== "object") return [];
+  const details: string[] = [];
+  if ("method" in error && typeof error.method === "string") {
+    details.push(`Request method: ${error.method}`);
+  }
+  if ("url" in error && typeof error.url === "string") {
+    details.push(`Request URL: ${error.url}`);
+  }
+  if ("status" in error && typeof error.status === "number") {
+    details.push(`HTTP status: ${error.status}`);
+  }
+  if ("body" in error) {
+    const body = compactDebugValue(error.body);
+    if (body) details.push(`Response body: ${body}`);
+  }
+  if ("data" in error) {
+    const data = compactDebugValue(error.data);
+    if (data && !details.some((line) => line.endsWith(data))) details.push(`Response data: ${data}`);
+  }
+  return details;
+}
+
 function toLaunchErrorState(error: unknown, stage: StreamLoadingStatus): LaunchErrorState {
   const unknownMessage = "The game could not start. Please try again.";
+  const occurredAtIso = new Date().toISOString();
 
   const titleFromError =
     error && typeof error === "object" && "title" in error && typeof error.title === "string"
@@ -761,6 +804,8 @@ function toLaunchErrorState(error: unknown, stage: StreamLoadingStatus): LaunchE
       title: "Duplicate Session Detected",
       description: "Another session is already running on your account. Close it first or wait for it to timeout, then launch again.",
       codeLabel: toCodeLabel(code),
+      debugDetails: extractLaunchErrorDebugDetails(error),
+      occurredAtIso,
     };
   }
 
@@ -769,7 +814,16 @@ function toLaunchErrorState(error: unknown, stage: StreamLoadingStatus): LaunchE
     title: titleFromError || "Launch Failed",
     description: descriptionFromError || messageFromError || statusDescription || unknownMessage,
     codeLabel: toCodeLabel(code),
+    debugDetails: extractLaunchErrorDebugDetails(error),
+    occurredAtIso,
   };
+}
+
+function appendBoundedLaunchLog(logLines: string[], message: string): void {
+  logLines.push(`[${new Date().toISOString()}] ${message}`);
+  if (logLines.length > 80) {
+    logLines.splice(0, logLines.length - 80);
+  }
 }
 
 function formatLaunchErrorForCopy(error: LaunchErrorState, gameTitle: string): string {
@@ -780,7 +834,8 @@ function formatLaunchErrorForCopy(error: LaunchErrorState, gameTitle: string): s
     `Title: ${error.title}`,
     `Description: ${error.description}`,
     error.codeLabel ? `Code: ${error.codeLabel}` : null,
-    `Time: ${new Date().toISOString()}`,
+    ...(error.debugDetails ?? []),
+    `Time: ${error.occurredAtIso}`,
   ].filter((line): line is string => Boolean(line)).join("\n");
 }
 
@@ -2595,15 +2650,19 @@ export function App(): JSX.Element {
     resetStatsOverlayToPreference();
     const selectedVariantId = variantByGameId[game.id] ?? defaultVariantId(game);
     const selectedVariant = getSelectedVariant(game, selectedVariantId);
+    let appId: string | null = null;
     startPlaytimeSession(game.id);
     updateLoadingStep("queue");
     setQueuePosition(undefined);
+
+    const launchLogLines: string[] = [];
+    const logLaunch = (message: string): void => appendBoundedLaunchLog(launchLogLines, message);
+    logLaunch(`Launch requested for "${game.title}" (${game.id})`);
 
     try {
       const token = authSession?.tokens.idToken ?? authSession?.tokens.accessToken;
 
       // Resolve appId
-      let appId: string | null = null;
       if (isNumericId(selectedVariantId)) {
         appId = selectedVariantId;
       } else if (isNumericId(game.launchAppId)) {
@@ -2626,10 +2685,11 @@ export function App(): JSX.Element {
       }
 
       if (!appId) {
-        throw new Error("Could not resolve numeric appId for this game");
+        throw new Error("Could not resolve a positive numeric appId for this game");
       }
 
       const numericAppId = Number(appId);
+      logLaunch(`Resolved appId=${numericAppId}, selectedVariantId=${selectedVariantId}, store=${selectedVariant?.store ?? "n/a"}`);
       const matchedGameContext = findSessionContextForAppId(allKnownGames, variantByGameId, numericAppId) ?? {
         game,
         variant: selectedVariant,
@@ -2680,6 +2740,9 @@ export function App(): JSX.Element {
       }
 
       // Create new session
+      logLaunch(
+        `Creating session via ${options?.streamingBaseUrl || effectiveStreamingBaseUrl}, zone=prod, existingSessionStrategy=${existingSessionStrategy ?? "default"}`,
+      );
       const newSession = await openNow.createSession({
         token: token || undefined,
         streamingBaseUrl: options?.streamingBaseUrl || effectiveStreamingBaseUrl,
@@ -2703,6 +2766,9 @@ export function App(): JSX.Element {
 
       setSession(newSession);
       setQueuePosition(newSession.queuePosition);
+      logLaunch(
+        `Session created: sessionId=${newSession.sessionId}, status=${newSession.status}, queuePosition=${newSession.queuePosition ?? "n/a"}, serverIp=${newSession.serverIp ?? "n/a"}, zone=${newSession.zone ?? "n/a"}`,
+      );
 
       // Poll for readiness.
       // Queue and setup/starting modes wait indefinitely until the session becomes ready
@@ -2789,6 +2855,9 @@ export function App(): JSX.Element {
         console.log(
           `Poll attempt ${attempt}: status=${mergedSession.status}, seatSetupStep=${mergedSession.seatSetupStep ?? "n/a"}, queuePosition=${mergedSession.queuePosition ?? "n/a"}, serverIp=${mergedSession.serverIp}, queueMode=${isInQueueMode}, adsRequired=${isSessionAdsRequired(mergedSession.adState)}`,
         );
+        logLaunch(
+          `Poll ${attempt}: status=${mergedSession.status}, seatSetupStep=${mergedSession.seatSetupStep ?? "n/a"}, queuePosition=${mergedSession.queuePosition ?? "n/a"}, serverIp=${mergedSession.serverIp ?? "n/a"}, queueMode=${isInQueueMode}, adsRequired=${isSessionAdsRequired(mergedSession.adState)}`,
+        );
 
         if (isSessionReadyForConnect(mergedSession.status)) {
           finalSession = mergedSession;
@@ -2831,7 +2900,19 @@ export function App(): JSX.Element {
         return;
       }
       console.error("Launch failed:", error);
-      setLaunchError(toLaunchErrorState(error, loadingStep));
+      const launchErrorState = toLaunchErrorState(error, loadingStep);
+      launchErrorState.debugDetails = [
+        ...(launchErrorState.debugDetails ?? []),
+        `Game id: ${game.id}`,
+        `Game uuid: ${game.uuid ?? "n/a"}`,
+        `Selected variant id: ${selectedVariantId}`,
+        `Selected store: ${selectedVariant?.store ?? "n/a"}`,
+        `Game launchAppId: ${game.launchAppId ?? "n/a"}`,
+        `Resolved appId: ${appId ?? "n/a"}`,
+        `Streaming base: ${options?.streamingBaseUrl || effectiveStreamingBaseUrl}`,
+        ...launchLogLines.map((line) => `Launch log: ${line}`),
+      ];
+      setLaunchError(launchErrorState);
       await openNow.disconnectSignaling().catch(() => {});
       clientRef.current?.dispose();
       clientRef.current = null;
