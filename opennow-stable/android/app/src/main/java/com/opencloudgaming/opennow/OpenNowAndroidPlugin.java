@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
@@ -76,6 +78,21 @@ public class OpenNowAndroidPlugin extends Plugin {
     private JSObject pendingLaunchIntent;
     private int launchIntentSequence = 0;
     private boolean pointerCaptureRequested = false;
+    private final Handler pointerCaptureHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pointerCaptureRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!pointerCaptureRequested) {
+                return;
+            }
+
+            View view = pointerCaptureView;
+            if (view != null && view.isAttachedToWindow()) {
+                requestNativePointerCapture(view);
+            }
+            pointerCaptureHandler.postDelayed(this, 250);
+        }
+    };
     private static volatile boolean immersiveFullscreenRequested = false;
 
     @Override
@@ -115,8 +132,12 @@ public class OpenNowAndroidPlugin extends Plugin {
 
             if (enabled) {
                 requestNativePointerCapture(view);
+                schedulePointerCaptureRefresh();
             } else if (view.hasPointerCapture()) {
+                stopPointerCaptureRefresh();
                 view.releasePointerCapture();
+            } else {
+                stopPointerCaptureRefresh();
             }
 
             payload.put("enabled", view.hasPointerCapture());
@@ -150,17 +171,6 @@ public class OpenNowAndroidPlugin extends Plugin {
         }
 
         pointerCaptureView = view;
-        view.setOnPointerCaptureChangeListener((captureView, hasCapture) -> {
-            if (!pointerCaptureRequested || hasCapture) {
-                return;
-            }
-
-            captureView.postDelayed(() -> {
-                if (pointerCaptureRequested && captureView.isAttachedToWindow()) {
-                    requestNativePointerCapture(captureView);
-                }
-            }, 80);
-        });
         view.setOnCapturedPointerListener((capturedView, event) -> {
             if (!isSupportedPointerSource(event.getSource())) {
                 return false;
@@ -254,6 +264,15 @@ public class OpenNowAndroidPlugin extends Plugin {
         if (!view.hasPointerCapture()) {
             view.requestPointerCapture();
         }
+    }
+
+    private void schedulePointerCaptureRefresh() {
+        pointerCaptureHandler.removeCallbacks(pointerCaptureRefreshRunnable);
+        pointerCaptureHandler.postDelayed(pointerCaptureRefreshRunnable, 250);
+    }
+
+    private void stopPointerCaptureRefresh() {
+        pointerCaptureHandler.removeCallbacks(pointerCaptureRefreshRunnable);
     }
 
     private JSObject parseLaunchIntent(Intent intent) {
