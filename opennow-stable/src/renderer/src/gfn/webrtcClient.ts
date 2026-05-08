@@ -67,6 +67,7 @@ export interface StreamDiagnostics {
   connectionState: RTCPeerConnectionState | "closed";
   inputReady: boolean;
   connectedGamepads: number;
+  physicalGamepads: number;
 
   // Video stats
   resolution: string;
@@ -598,6 +599,7 @@ export class GfnWebRtcClient {
     connectionState: "closed",
     inputReady: false,
     connectedGamepads: 0,
+    physicalGamepads: 0,
     resolution: "",
     codec: "",
     isHdr: false,
@@ -874,6 +876,7 @@ export class GfnWebRtcClient {
       connectionState: this.pc?.connectionState ?? "closed",
       inputReady: false,
       connectedGamepads: 0,
+      physicalGamepads: 0,
       resolution: "",
       codec: "",
       isHdr: false,
@@ -1886,7 +1889,8 @@ export class GfnWebRtcClient {
           this.log(`Gamepad ${i} connected: ${gamepad.id}`);
           this.log(`  Buttons: ${gamepad.buttons.length}, Axes: ${gamepad.axes.length}, Mapping: ${gamepad.mapping}`);
           this.log(`  Bitmap now: 0x${this.gamepadBitmap.toString(16)}`);
-          this.diagnostics.connectedGamepads = this.connectedGamepads.size;
+          this.diagnostics.physicalGamepads = this.connectedGamepads.size;
+          this.diagnostics.connectedGamepads = this.connectedGamepads.size + (this.virtualGamepadConnected ? 1 : 0);
           this.emitStats();
         }
 
@@ -1932,7 +1936,8 @@ export class GfnWebRtcClient {
         this.previousGamepadTouchpadClicks.delete(i);
         this.gamepadBitmap &= ~(1 << i);
         this.log(`Gamepad ${i} disconnected, bitmap now: 0x${this.gamepadBitmap.toString(16)}`);
-        this.diagnostics.connectedGamepads = this.connectedGamepads.size;
+        this.diagnostics.physicalGamepads = this.connectedGamepads.size;
+        this.diagnostics.connectedGamepads = this.connectedGamepads.size + (this.virtualGamepadConnected ? 1 : 0);
         this.emitStats();
 
         // Send state with updated bitmap (gamepad bit cleared = disconnected)
@@ -1958,6 +1963,7 @@ export class GfnWebRtcClient {
       }
     }
 
+    this.diagnostics.physicalGamepads = connectedCount;
     this.diagnostics.connectedGamepads = connectedCount + (this.virtualGamepadConnected ? 1 : 0);
   }
 
@@ -2040,6 +2046,7 @@ export class GfnWebRtcClient {
     }
     this.lastGamepadSendMs = nowMs;
     this.previousVirtualGamepadState = { ...gamepadInput };
+    this.diagnostics.physicalGamepads = this.connectedGamepads.size;
     this.diagnostics.connectedGamepads = this.connectedGamepads.size + (this.virtualGamepadConnected ? 1 : 0);
     this.emitStats();
   }

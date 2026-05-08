@@ -1094,6 +1094,7 @@ function AndroidStreamMenu({
   onEndSession,
   onSendText,
   onSendKeyPress,
+  physicalGamepads,
   revealSignal,
 }: {
   diagnosticsStore: StreamDiagnosticsStore;
@@ -1104,6 +1105,7 @@ function AndroidStreamMenu({
   onEndSession: () => void;
   onSendText?: (text: string) => number;
   onSendKeyPress?: (key: "Backspace" | "Enter") => void;
+  physicalGamepads: number;
   revealSignal?: number;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -1112,6 +1114,7 @@ function AndroidStreamMenu({
   const elapsedSeconds = useElapsedSeconds(sessionStartedAtMs, isStreaming);
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
+  const lastRevealSignalRef = useRef(revealSignal);
   const stats = useStreamDiagnosticsSelector(
     diagnosticsStore,
     (value) => ({
@@ -1164,8 +1167,18 @@ function AndroidStreamMenu({
     scheduleHide();
   }, [open, scheduleHide]);
   useEffect(() => {
+    if (lastRevealSignalRef.current === revealSignal) {
+      return;
+    }
+    lastRevealSignalRef.current = revealSignal;
+    if (open) {
+      setOpen(false);
+      setVisible(true);
+      scheduleHide();
+      return;
+    }
     reveal(5000);
-  }, [revealSignal, reveal]);
+  }, [open, revealSignal, reveal, scheduleHide]);
   useEffect(() => () => {
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
@@ -1234,10 +1247,11 @@ function AndroidStreamMenu({
           <label className="sv-android-switch">
             <input
               type="checkbox"
-              checked={touchSettings.mouseCapture}
+              checked={touchSettings.mouseCapture && physicalGamepads === 0}
+              disabled={physicalGamepads > 0}
               onChange={(event) => updateTouchSettings({ mouseCapture: event.target.checked })}
             />
-            <span><MousePointer2 size={14} /> External mouse capture</span>
+            <span><MousePointer2 size={14} /> {physicalGamepads > 0 ? "Mouse capture paused" : "External mouse capture"}</span>
           </label>
 
           <div className="sv-android-text-input">
@@ -1550,6 +1564,11 @@ export function StreamView({
     () => normalizeAndroidTouchSettings(androidTouchControls),
     [androidTouchControls],
   );
+  const androidPhysicalGamepads = useStreamDiagnosticsSelector(
+    diagnosticsStore,
+    (stats) => stats.physicalGamepads,
+  );
+  const androidNativeMouseCapture = androidTouchSettings.mouseCapture && androidPhysicalGamepads === 0;
   const [androidMenuRevealSignal, setAndroidMenuRevealSignal] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIdRef = useRef<string | null>(null);
@@ -1574,7 +1593,7 @@ export function StreamView({
       !platformCapabilities.isAndroid ||
       !isStreaming ||
       isConnecting ||
-      !androidTouchSettings.mouseCapture ||
+      !androidNativeMouseCapture ||
       !onTouchMouseMove
     ) {
       return;
@@ -1615,7 +1634,7 @@ export function StreamView({
       unsubscribeWheel();
       void openNow.setNativePointerCapture(false);
     };
-  }, [androidTouchSettings.mouseCapture, isConnecting, isStreaming, onTouchMouseButton, onTouchMouseMove, onTouchMouseWheel]);
+  }, [androidNativeMouseCapture, isConnecting, isStreaming, onTouchMouseButton, onTouchMouseMove, onTouchMouseWheel]);
 
   useEffect(() => {
     if (!platformCapabilities.isAndroid) {
@@ -2865,7 +2884,7 @@ export function StreamView({
 
       {platformCapabilities.isAndroid && !isConnecting && (
         <>
-          {onVirtualGamepadState && androidTouchSettings.enabled && (
+          {onVirtualGamepadState && androidTouchSettings.enabled && androidPhysicalGamepads === 0 && (
             <TouchControllerOverlay
               onVirtualGamepadState={onVirtualGamepadState}
               settings={androidTouchSettings}
@@ -2885,6 +2904,7 @@ export function StreamView({
             onEndSession={onEndSession}
             onSendText={onSendText}
             onSendKeyPress={onSendKeyPress}
+            physicalGamepads={androidPhysicalGamepads}
             revealSignal={androidMenuRevealSignal}
           />
         </>

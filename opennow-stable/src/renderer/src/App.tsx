@@ -108,7 +108,29 @@ function getAndroidStreamCompatibilityReason(): string | null {
   if (/powervr|ge8320|ge83\d{2}|ge8\d{3}/i.test(renderer)) {
     return renderer || "PowerVR Android GPU";
   }
+  const userAgent = navigator.userAgent ?? "";
+  const isTvLikeAndroid =
+    /android tv|google tv|googletv|gtv|smart-?tv|bravia|aft\w*|shield android tv|crkey/i.test(userAgent) ||
+    navigator.maxTouchPoints === 0;
+  if (isTvLikeAndroid) {
+    return "Android TV / Google TV WebView";
+  }
   return null;
+}
+
+function capAndroidCompatibilityResolution(resolution: string): string {
+  const match = /^(\d+)x(\d+)$/.exec(resolution);
+  if (!match?.[1] || !match[2]) {
+    return "1920x1080";
+  }
+
+  const width = Number.parseInt(match[1], 10);
+  const height = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return "1920x1080";
+  }
+
+  return width * height > 1920 * 1080 ? "1920x1080" : resolution;
 }
 
 function getEffectiveStreamPreferences(
@@ -126,7 +148,7 @@ function getEffectiveStreamPreferences(
   }
 
   return {
-    resolution: settings.resolution,
+    resolution: capAndroidCompatibilityResolution(settings.resolution),
     fps: Math.min(settings.fps, 60),
     maxBitrateMbps: Math.min(settings.maxBitrateMbps, 35),
     codec: "H264",
@@ -514,6 +536,7 @@ function defaultDiagnostics(): StreamDiagnostics {
     connectionState: "closed",
     inputReady: false,
     connectedGamepads: 0,
+    physicalGamepads: 0,
     resolution: "",
     codec: "",
     isHdr: false,
@@ -1122,6 +1145,7 @@ export function App(): JSX.Element {
     if (
       settings.codec === effectiveStreamPreferences.codec &&
       settings.colorQuality === effectiveStreamPreferences.colorQuality &&
+      settings.resolution === effectiveStreamPreferences.resolution &&
       settings.maxBitrateMbps <= effectiveStreamPreferences.maxBitrateMbps &&
       settings.fps <= effectiveStreamPreferences.fps
     ) {

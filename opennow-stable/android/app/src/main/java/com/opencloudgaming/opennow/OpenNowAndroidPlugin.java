@@ -250,7 +250,9 @@ public class OpenNowAndroidPlugin extends Plugin {
             && (source & InputDevice.SOURCE_MOUSE_RELATIVE) == InputDevice.SOURCE_MOUSE_RELATIVE) {
             return true;
         }
-        return (source & InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD;
+        // Android exposes some controller touchpads as SOURCE_TOUCHPAD. Capturing
+        // those as mice can interfere with the normal WebView gamepad path.
+        return false;
     }
 
     private void requestNativePointerCapture(View view) {

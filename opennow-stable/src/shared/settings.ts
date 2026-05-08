@@ -11,7 +11,7 @@ export const DEFAULT_ANDROID_TOUCH_SETTINGS: AndroidTouchSettings = {
   opacity: 0.74,
   placement: "default",
   mousePad: true,
-  mouseCapture: true,
+  mouseCapture: false,
 };
 
 function clampNumber(value: number, min: number, max: number): number {
