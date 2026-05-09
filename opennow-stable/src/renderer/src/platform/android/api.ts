@@ -62,6 +62,7 @@ import type {
   ThankYouDataResult,
   PrintedWasteQueueData,
   PrintedWasteServerMapping,
+  AndroidPerformanceInfo,
 } from "@shared/gfn";
 import { DEFAULT_KEYBOARD_LAYOUT, colorQualityBitDepth, colorQualityChromaFormat, resolveGfnKeyboardLayout } from "@shared/gfn";
 import {
@@ -139,6 +140,7 @@ const LocalhostAuth = registerPlugin<LocalhostAuthPlugin>("LocalhostAuth");
 interface OpenNowAndroidPlugin {
   setImmersiveFullscreen(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
   setPointerCapture(options: { enabled: boolean }): Promise<{ supported: boolean; enabled: boolean }>;
+  getPerformanceInfo(): Promise<AndroidPerformanceInfo>;
   consumeLaunchIntent(): Promise<{ intent?: AndroidLaunchIntent | null }>;
   addListener(
     eventName: "nativeMouseMove" | "nativeMouseButton" | "nativeMouseWheel" | "launchIntent",
@@ -153,7 +155,22 @@ interface TokenResponse { access_token: string; refresh_token?: string; id_token
 interface ClientTokenResponse { client_token: string; expires_in?: number; }
 interface ServiceUrlsResponse { gfnServiceInfo?: { gfnServiceEndpoints?: Array<{ idpId: string; loginProviderCode: string; loginProviderDisplayName: string; streamingServiceUrl: string; loginProviderPriority?: number; }>; }; }
 interface ServerInfoResponse { requestStatus?: { serverId?: string }; metaData?: Array<{ key: string; value: string }>; }
-interface GraphQlResponse { data?: { panels?: Array<{ sections?: Array<{ items?: Array<{ __typename: string; app?: AppData }> }> }>; apps?: { items: AppData[] } }; errors?: Array<{ message: string }>; }
+interface GraphQlResponse {
+  data?: {
+    panels?: Array<{ sections?: Array<{ items?: Array<{ __typename: string; app?: AppData }> }> }>;
+    apps?: {
+      items: AppData[];
+      numberReturned?: number;
+      numberSupported?: number;
+      pageInfo?: {
+        totalCount?: number;
+        hasNextPage?: boolean;
+        endCursor?: string;
+      };
+    };
+  };
+  errors?: Array<{ message: string }>;
+}
 interface AppData { id: string; title: string; description?: string; longDescription?: string; features?: unknown[]; gameFeatures?: unknown[]; appFeatures?: unknown[]; genres?: unknown[]; tags?: unknown[]; images?: { KEY_ART?: string; GAME_BOX_ART?: string; TV_BANNER?: string; HERO_IMAGE?: string }; publisherName?: string; contentRatings?: unknown[]; variants?: Array<{ id: string; appStore: string; supportedControls?: string[]; gfn?: { status?: string; library?: { selected?: boolean; status?: string; lastPlayedDate?: string } } }>; gfn?: { playType?: string; playabilityState?: string; minimumMembershipTierLabel?: string; catalogSkuStrings?: { SKU_BASED_TAG?: string[] } }; }
 interface SubscriptionResponse { firstEntitlementStartDateTime?: string; type?: string; membershipTier?: string; allottedTimeInMinutes?: number; purchasedTimeInMinutes?: number; rolledOverTimeInMinutes?: number; remainingTimeInMinutes?: number; totalTimeInMinutes?: number; notifications?: { notifyUserWhenTimeRemainingInMinutes?: number; notifyUserOnSessionWhenRemainingTimeInMinutes?: number }; currentSpanStartDateTime?: string; currentSpanEndDateTime?: string; currentSubscriptionState?: { state?: string; isGamePlayAllowed?: boolean }; subType?: string; addons?: Array<{ type?: string; subType?: string; status?: string; attributes?: Array<{ key?: string; textValue?: string }> }>; features?: { resolutions?: Array<{ heightInPixels: number; widthInPixels: number; framesPerSecond: number }> }; }
 interface RawPublicGame { id?: string | number; title?: string; steamUrl?: string; status?: string; }
@@ -458,6 +475,84 @@ async function fetchCatalog(kind: "MAIN" | "LIBRARY", token: string, providerStr
   const payload = await fetchPanels(token, [kind], vpcId);
   return flattenPanels(payload);
 }
+async function searchCatalog(
+  token: string,
+  providerStreamingBaseUrl: string | undefined,
+  searchQuery: string,
+): Promise<{ games: GameInfo[]; numberReturned: number; numberSupported: number; totalCount: number }> {
+  const vpcId = await getVpcId(token, providerStreamingBaseUrl);
+  const query = `query GetSearchFilterResults(
+    $vpcId: String!,
+    $locale: String!,
+    $sortString: String!,
+    $fetchCount: Int!,
+    $cursor: String!,
+    $searchString: String!,
+    $filters: AppFilterFields!
+  ) {
+    apps(
+      vpcId: $vpcId,
+      language: $locale,
+      orderBy: $sortString,
+      first: $fetchCount,
+      after: $cursor,
+      searchQuery: $searchString,
+      filters: $filters
+    ) {
+      numberReturned
+      numberSupported
+      pageInfo { totalCount hasNextPage endCursor }
+      items {
+        id
+        title
+        images { KEY_ART GAME_BOX_ART TV_BANNER HERO_IMAGE }
+        variants {
+          id
+          appStore
+          supportedControls
+          gfn {
+            status
+            library { status selected lastPlayedDate }
+          }
+        }
+        gfn {
+          playType
+          playabilityState
+          minimumMembershipTierLabel
+          catalogSkuStrings { SKU_BASED_TAG }
+        }
+      }
+    }
+  }`;
+
+  const payload = await httpRequest<GraphQlResponse>(GFN_GRAPHQL_URL, {
+    method: "POST",
+    headers: buildCatalogHeaders(token),
+    data: {
+      query,
+      variables: {
+        vpcId,
+        locale: DEFAULT_LOCALE,
+        sortString: "itemMetadata.relevance:DESC,sortName:ASC",
+        fetchCount: 100,
+        cursor: "",
+        searchString: searchQuery,
+        filters: {},
+      },
+    },
+  });
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message).join(", "));
+  }
+  const apps = payload.data?.apps;
+  const games = dedupeGames((apps?.items ?? []).map(appToGame));
+  return {
+    games,
+    numberReturned: apps?.numberReturned ?? games.length,
+    numberSupported: Math.max(apps?.numberSupported ?? 0, games.length),
+    totalCount: Math.max(apps?.pageInfo?.totalCount ?? 0, games.length),
+  };
+}
 const androidCatalogCache = new Map<string, { games: GameInfo[]; loadedAtMs: number }>();
 const androidCatalogInflight = new Map<string, Promise<GameInfo[]>>();
 function androidCatalogCacheKey(kind: "MAIN" | "LIBRARY", token: string, providerStreamingBaseUrl?: string): string {
@@ -584,18 +679,28 @@ async function browseCatalogRequest(input: CatalogBrowseRequest): Promise<Catalo
     ? (input.sortId as string)
     : "relevance";
   const normalizedQuery = input.searchQuery?.trim().toLowerCase() ?? "";
-  const searchedGames = normalizedQuery
-    ? allGames.filter((game) => catalogSearchText(game).includes(normalizedQuery))
-    : allGames;
+  let searchResult: Awaited<ReturnType<typeof searchCatalog>> | null = null;
+  if (normalizedQuery) {
+    try {
+      searchResult = await searchCatalog(token, input.providerStreamingBaseUrl, normalizedQuery);
+    } catch (error) {
+      console.warn("[Android catalog] Full catalog search failed; falling back to cached Main panel search.", error);
+    }
+  }
+  const searchedGames = searchResult
+    ? searchResult.games
+    : normalizedQuery
+      ? allGames.filter((game) => catalogSearchText(game).includes(normalizedQuery))
+      : allGames;
   const filteredGames = selectedFilterIds.length > 0
     ? searchedGames.filter((game) => selectedFilterIds.every((filterId) => gameMatchesCatalogFilter(game, filterId)))
     : searchedGames;
   const sortedGames = sortAndroidCatalogGames(filteredGames, selectedSortId);
   return {
     games: sortedGames,
-    numberReturned: sortedGames.length,
-    numberSupported: sortedGames.length,
-    totalCount: filteredGames.length,
+    numberReturned: searchResult?.numberReturned ?? sortedGames.length,
+    numberSupported: searchResult?.numberSupported ?? sortedGames.length,
+    totalCount: searchResult?.totalCount ?? filteredGames.length,
     hasNextPage: false,
     searchQuery: input.searchQuery ?? "",
     selectedSortId,
@@ -1319,6 +1424,7 @@ const api: OpenNowApi = {
   onNativeMouseMove,
   onNativeMouseButton,
   onNativeMouseWheel,
+  getAndroidPerformanceInfo: async (): Promise<AndroidPerformanceInfo> => OpenNowAndroid.getPerformanceInfo(),
   consumeLaunchIntent: async (): Promise<AndroidLaunchIntent | null> => {
     const result = await OpenNowAndroid.consumeLaunchIntent().catch(() => ({ intent: null }));
     return result.intent ?? null;

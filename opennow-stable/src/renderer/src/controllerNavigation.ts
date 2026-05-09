@@ -125,6 +125,38 @@ function setRangeEditMode(input: HTMLInputElement | null): void {
   }
 }
 
+function shouldKeepTextInputKeyEvent(target: HTMLElement, event: KeyboardEvent): boolean {
+  if (target instanceof HTMLInputElement && target.type === "range") {
+    return false;
+  }
+
+  if (
+    !(target instanceof HTMLInputElement) &&
+    !(target instanceof HTMLTextAreaElement) &&
+    !target.isContentEditable
+  ) {
+    return false;
+  }
+
+  // TV remotes and controller-to-keyboard bridges often land on search inputs.
+  // Let vertical/back navigation escape those fields instead of trapping users
+  // until they find Tab, while preserving normal text editing for typing and
+  // horizontal caret movement.
+  if (
+    event.key === "ArrowUp" ||
+    event.key === "Up" ||
+    event.key === "ArrowDown" ||
+    event.key === "Down" ||
+    event.key === "Escape" ||
+    event.key === "Backspace" ||
+    event.key === "BrowserBack"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function moveFocus(direction: Direction): void {
   const current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (
@@ -300,12 +332,7 @@ export function useControllerNavigation({
 
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement | null;
-      const isTyping = !!target && (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      );
-      if (isTyping && !(target instanceof HTMLInputElement && target.type === "range")) {
+      if (target && shouldKeepTextInputKeyEvent(target, event)) {
         return;
       }
 

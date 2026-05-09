@@ -97,6 +97,7 @@ interface StreamViewProps {
   onRecordingShortcutChange: (value: string) => void;
   subscriptionInfo: SubscriptionInfo | null;
   micTrack?: MediaStreamTrack | null;
+  lowPowerTouchControls?: boolean;
   className?: string;
 }
 
@@ -630,15 +631,25 @@ function quantizeTouchStickValue(value: StickValue): StickValue {
 
 function TouchStick({
   label,
-  value,
   onChange,
 }: {
   label: string;
-  value: StickValue;
   onChange: (value: StickValue) => void;
 }): JSX.Element {
   const baseRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+
+  const setThumbPosition = useCallback((value: StickValue) => {
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = `translate(${value.x * 28}px, ${value.y * 28}px)`;
+    }
+  }, []);
+
+  const updateStick = useCallback((value: StickValue) => {
+    setThumbPosition(value);
+    onChange(value);
+  }, [onChange, setThumbPosition]);
 
   const updateFromPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rect = baseRef.current?.getBoundingClientRect();
@@ -650,8 +661,8 @@ function TouchStick({
     const rawY = (event.clientY - centerY) / radius;
     const magnitude = Math.hypot(rawX, rawY);
     const scale = magnitude > 1 ? 1 / magnitude : 1;
-    onChange(quantizeTouchStickValue({ x: rawX * scale, y: rawY * scale }));
-  }, [onChange]);
+    updateStick(quantizeTouchStickValue({ x: rawX * scale, y: rawY * scale }));
+  }, [updateStick]);
 
   useEffect(() => {
     const releasePointer = (event: PointerEvent) => {
@@ -659,7 +670,7 @@ function TouchStick({
         return;
       }
       activePointerIdRef.current = null;
-      onChange({ x: 0, y: 0 });
+      updateStick({ x: 0, y: 0 });
     };
 
     window.addEventListener("pointerup", releasePointer);
@@ -668,7 +679,7 @@ function TouchStick({
       window.removeEventListener("pointerup", releasePointer);
       window.removeEventListener("pointercancel", releasePointer);
     };
-  }, [onChange]);
+  }, [updateStick]);
 
   return (
     <div
@@ -691,24 +702,22 @@ function TouchStick({
           event.preventDefault();
           tryReleasePointerCapture(event.currentTarget, event.pointerId);
           activePointerIdRef.current = null;
-          onChange({ x: 0, y: 0 });
+          updateStick({ x: 0, y: 0 });
         }
       }}
       onPointerCancel={(event) => {
         if (hasActivePointer(event.currentTarget, event.pointerId, activePointerIdRef.current)) {
           tryReleasePointerCapture(event.currentTarget, event.pointerId);
           activePointerIdRef.current = null;
-          onChange({ x: 0, y: 0 });
+          updateStick({ x: 0, y: 0 });
         }
       }}
       aria-label={label}
       role="application"
     >
       <span
+        ref={thumbRef}
         className="sv-touch-stick-thumb"
-        style={{
-          transform: `translate(${value.x * 28}px, ${value.y * 28}px)`,
-        }}
       />
     </div>
   );
@@ -718,18 +727,19 @@ function TouchControllerOverlay({
   onVirtualGamepadState,
   settings,
   revealSignal,
+  lowPowerMode = false,
 }: {
   onVirtualGamepadState: (state: VirtualGamepadState) => void;
   settings: AndroidTouchSettings;
   revealSignal?: number;
+  lowPowerMode?: boolean;
 }): JSX.Element {
-  const [leftStick, setLeftStick] = useState<StickValue>({ x: 0, y: 0 });
-  const [rightStick, setRightStick] = useState<StickValue>({ x: 0, y: 0 });
   const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsVisibleRef = useRef(true);
   const buttonsRef = useRef(0);
   const triggersRef = useRef({ left: 0, right: 0 });
-  const leftStickRef = useRef(leftStick);
-  const rightStickRef = useRef(rightStick);
+  const leftStickRef = useRef<StickValue>({ x: 0, y: 0 });
+  const rightStickRef = useRef<StickValue>({ x: 0, y: 0 });
   const virtualConnectedRef = useRef(false);
   const lastTouchActivityMsRef = useRef(0);
   const lastEmitMsRef = useRef(0);
@@ -737,6 +747,12 @@ function TouchControllerOverlay({
   const hideControlsTimerRef = useRef<number | null>(null);
   const activeButtonPointersRef = useRef(new Map<number, number>());
   const activeTriggerPointersRef = useRef(new Map<number, "left" | "right">());
+  const minEmitMs = lowPowerMode ? 33 : ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS;
+  const keepaliveMs = lowPowerMode ? 500 : ANDROID_TOUCH_CONTROLLER_KEEPALIVE_MS;
+
+  useEffect(() => {
+    controlsVisibleRef.current = controlsVisible;
+  }, [controlsVisible]);
 
   const isNeutral = useCallback(() => (
     buttonsRef.current === 0 &&
@@ -793,7 +809,7 @@ function TouchControllerOverlay({
 
     const now = performance.now();
     const elapsed = now - lastEmitMsRef.current;
-    if (elapsed >= ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS) {
+    if (elapsed >= minEmitMs) {
       emitNow(connected);
       return;
     }
@@ -805,12 +821,14 @@ function TouchControllerOverlay({
     pendingEmitRef.current = window.setTimeout(() => {
       pendingEmitRef.current = null;
       emitNow(connected);
-    }, Math.max(1, ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS - elapsed));
-  }, [emitNow]);
+    }, Math.max(1, minEmitMs - elapsed));
+  }, [emitNow, minEmitMs]);
 
   const markTouchActivity = useCallback(() => {
     lastTouchActivityMsRef.current = performance.now();
-    revealControls();
+    if (!controlsVisibleRef.current) {
+      revealControls();
+    }
     if (!virtualConnectedRef.current) {
       virtualConnectedRef.current = true;
     }
@@ -821,7 +839,6 @@ function TouchControllerOverlay({
       return;
     }
     leftStickRef.current = value;
-    setLeftStick(value);
     markTouchActivity();
     scheduleEmit(true, value.x === 0 && value.y === 0);
   }, [markTouchActivity, scheduleEmit]);
@@ -831,7 +848,6 @@ function TouchControllerOverlay({
       return;
     }
     rightStickRef.current = value;
-    setRightStick(value);
     markTouchActivity();
     scheduleEmit(true, value.x === 0 && value.y === 0);
   }, [markTouchActivity, scheduleEmit]);
@@ -954,7 +970,7 @@ function TouchControllerOverlay({
         return;
       }
       scheduleEmit(true);
-    }, ANDROID_TOUCH_CONTROLLER_KEEPALIVE_MS);
+    }, keepaliveMs);
     return () => {
       if (pendingEmitRef.current !== null) {
         window.clearTimeout(pendingEmitRef.current);
@@ -967,13 +983,14 @@ function TouchControllerOverlay({
       window.clearInterval(keepalive);
       onVirtualGamepadState({ ...EMPTY_VIRTUAL_GAMEPAD_STATE, connected: false });
     };
-  }, [emitNow, isNeutral, onVirtualGamepadState, scheduleEmit]);
+  }, [emitNow, isNeutral, keepaliveMs, onVirtualGamepadState, scheduleEmit]);
 
   return (
     <div
       className="sv-touch"
       data-placement={settings.placement}
       data-visible={controlsVisible ? "true" : "false"}
+      data-render-mode={lowPowerMode ? "lite" : "full"}
       aria-label="Touch controller"
       style={{
         "--sv-touch-scale": settings.size,
@@ -987,7 +1004,7 @@ function TouchControllerOverlay({
         <button type="button" className="sv-touch-btn sv-touch-btn--shoulder" {...bindButton(GAMEPAD_RB)}>RB</button>
       </div>
       <div className="sv-touch-left">
-        <TouchStick label="Left stick" value={leftStick} onChange={updateLeftStick} />
+        <TouchStick label="Left stick" onChange={updateLeftStick} />
         <div className="sv-touch-dpad" aria-label="D-pad">
           <button type="button" className="sv-touch-btn sv-touch-btn--dpad sv-touch-dpad-up" {...bindButton(GAMEPAD_DPAD_UP)}>U</button>
           <button type="button" className="sv-touch-btn sv-touch-btn--dpad sv-touch-dpad-left" {...bindButton(GAMEPAD_DPAD_LEFT)}>L</button>
@@ -1000,7 +1017,7 @@ function TouchControllerOverlay({
         <button type="button" className="sv-touch-btn sv-touch-btn--menu" {...bindButton(GAMEPAD_START)}>Menu</button>
       </div>
       <div className="sv-touch-right">
-        <TouchStick label="Right stick" value={rightStick} onChange={updateRightStick} />
+        <TouchStick label="Right stick" onChange={updateRightStick} />
         <div className="sv-touch-face" aria-label="Face buttons">
           <button type="button" className="sv-touch-btn sv-touch-btn--face sv-touch-face-y" {...bindButton(GAMEPAD_Y)}>Y</button>
           <button type="button" className="sv-touch-btn sv-touch-btn--face sv-touch-face-x" {...bindButton(GAMEPAD_X)}>X</button>
@@ -1704,6 +1721,7 @@ export function StreamView({
   onRecordingShortcutChange,
   subscriptionInfo,
   micTrack,
+  lowPowerTouchControls = false,
   hideStreamButtons = false,
   className,
 }: StreamViewProps): JSX.Element {
@@ -3082,6 +3100,7 @@ export function StreamView({
               onVirtualGamepadState={onVirtualGamepadState}
               settings={androidTouchSettings}
               revealSignal={androidTouchRevealSignal}
+              lowPowerMode={lowPowerTouchControls}
             />
           )}
           <AndroidMousePad

@@ -5831,6 +5831,35 @@ button.game-card-store-chip.active:hover {
   will-change: transform;
 }
 
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-left,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-right,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-shoulders,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-center,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-stick,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-btn,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-stick-thumb {
+  will-change: auto;
+}
+
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-stick,
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-btn {
+  opacity: 0.94;
+  background: rgb(13, 17, 21);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-stick-thumb {
+  background: rgb(214, 222, 230);
+  border-color: rgba(255, 255, 255, 0.36);
+}
+
+.android-shell .sv-touch[data-render-mode="lite"] .sv-touch-btn:active {
+  transform: none;
+  background: rgb(30, 42, 54);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
 .sv-touch-btn--shoulder,
 .sv-touch-btn--trigger,
 .sv-touch-btn--menu {

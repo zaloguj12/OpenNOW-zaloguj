@@ -1,6 +1,8 @@
 package com.opencloudgaming.opennow;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Color;
@@ -158,6 +160,23 @@ public class OpenNowAndroidPlugin extends Plugin {
         call.resolve(payload);
     }
 
+    @PluginMethod
+    public void getPerformanceInfo(PluginCall call) {
+        Activity activity = getActivity();
+        JSObject payload = new JSObject();
+        ActivityManager.MemoryInfo memoryInfo = readMemoryInfo(activity);
+        if (memoryInfo != null) {
+            payload.put("totalMemBytes", memoryInfo.totalMem);
+            payload.put("availMemBytes", memoryInfo.availMem);
+            payload.put("thresholdBytes", memoryInfo.threshold);
+            payload.put("lowMemory", memoryInfo.lowMemory);
+            payload.put("liteTouchRecommended", memoryInfo.totalMem > 0 && memoryInfo.totalMem < 3L * 1024L * 1024L * 1024L);
+        } else {
+            payload.put("liteTouchRecommended", false);
+        }
+        call.resolve(payload);
+    }
+
     @Override
     protected void handleOnNewIntent(Intent intent) {
         super.handleOnNewIntent(intent);
@@ -245,6 +264,19 @@ public class OpenNowAndroidPlugin extends Plugin {
             default:
                 return -1;
         }
+    }
+
+    private ActivityManager.MemoryInfo readMemoryInfo(Activity activity) {
+        if (activity == null) {
+            return null;
+        }
+        Object service = activity.getSystemService(Context.ACTIVITY_SERVICE);
+        if (!(service instanceof ActivityManager)) {
+            return null;
+        }
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        ((ActivityManager) service).getMemoryInfo(memoryInfo);
+        return memoryInfo;
     }
 
     private boolean isSupportedPointerSource(int source) {

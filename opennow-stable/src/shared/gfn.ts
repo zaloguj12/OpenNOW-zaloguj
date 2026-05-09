@@ -738,6 +738,14 @@ export interface AppUpdaterState {
   isPackaged: boolean;
 }
 
+export interface AndroidPerformanceInfo {
+  totalMemBytes?: number;
+  availMemBytes?: number;
+  thresholdBytes?: number;
+  lowMemory?: boolean;
+  liteTouchRecommended?: boolean;
+}
+
 export interface OpenNowApi {
   getAuthSession(input?: AuthSessionRequest): Promise<AuthSessionResult>;
   getLoginProviders(): Promise<LoginProvider[]>;
@@ -781,6 +789,7 @@ export interface OpenNowApi {
   onNativeMouseMove(listener: (event: NativeMouseMoveEvent) => void): () => void;
   onNativeMouseButton(listener: (event: NativeMouseButtonEvent) => void): () => void;
   onNativeMouseWheel(listener: (event: NativeMouseWheelEvent) => void): () => void;
+  getAndroidPerformanceInfo?(): Promise<AndroidPerformanceInfo>;
   consumeLaunchIntent(): Promise<AndroidLaunchIntent | null>;
   onLaunchIntent(listener: (event: AndroidLaunchIntent) => void): () => void;
   getSettings(): Promise<Settings>;

@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 
 import type {
   ActiveSessionInfo,
+  AndroidPerformanceInfo,
   AndroidLaunchIntent,
   AuthSession,
   AuthUser,
@@ -116,6 +117,20 @@ function getAndroidStreamCompatibilityReason(): string | null {
     return "Android TV / Google TV WebView";
   }
   return null;
+}
+
+function shouldUseLowPowerAndroidTouchControls(
+  androidCompatibilityReason: string | null,
+  androidPerformanceInfo: AndroidPerformanceInfo | null,
+): boolean {
+  if (/powervr|ge8320|ge83\d{2}|ge8\d{3}/i.test(androidCompatibilityReason ?? "")) {
+    return true;
+  }
+  if (androidPerformanceInfo?.liteTouchRecommended || androidPerformanceInfo?.lowMemory) {
+    return true;
+  }
+  const totalMemBytes = androidPerformanceInfo?.totalMemBytes;
+  return typeof totalMemBytes === "number" && totalMemBytes > 0 && totalMemBytes < 3 * 1024 * 1024 * 1024;
 }
 
 function capAndroidCompatibilityResolution(resolution: string): string {
@@ -1126,6 +1141,7 @@ export function App(): JSX.Element {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [codecResults, setCodecResults] = useState<CodecTestResult[] | null>(() => loadStoredCodecResults());
   const [codecTesting, setCodecTesting] = useState(false);
+  const [androidPerformanceInfo, setAndroidPerformanceInfo] = useState<AndroidPerformanceInfo | null>(null);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
   const diagnosticsStoreRef = useRef<ReturnType<typeof createStreamDiagnosticsStore> | null>(null);
@@ -1188,10 +1204,34 @@ export function App(): JSX.Element {
   const codecStartupTestAttemptedRef = useRef(false);
   const navbarSessionActionInFlightRef = useRef<"resume" | "terminate" | null>(null);
   const androidStreamCompatibilityReason = useMemo(() => getAndroidStreamCompatibilityReason(), []);
+  const lowPowerAndroidTouchControls = useMemo(
+    () => shouldUseLowPowerAndroidTouchControls(androidStreamCompatibilityReason, androidPerformanceInfo),
+    [androidPerformanceInfo, androidStreamCompatibilityReason],
+  );
   const effectiveStreamPreferences = useMemo(
     () => getEffectiveStreamPreferences(settings, androidStreamCompatibilityReason),
     [androidStreamCompatibilityReason, settings],
   );
+
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid || !openNow.getAndroidPerformanceInfo) {
+      return;
+    }
+
+    let cancelled = false;
+    void openNow.getAndroidPerformanceInfo()
+      .then((info) => {
+        if (!cancelled) {
+          setAndroidPerformanceInfo(info);
+        }
+      })
+      .catch((error) => {
+        console.warn("[Android] Failed to read native performance info:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!effectiveStreamPreferences.compatibilityReason) {
@@ -1413,12 +1453,15 @@ export function App(): JSX.Element {
           raf = window.requestAnimationFrame(tick);
           return;
         }
-        // Meta/Home button only: button 16 (standard)
-        const metaPressed = Boolean(pad.buttons[16]?.pressed);
-        if (metaPressed && !prev.pressed) {
+        // On Android/TV the Xbox guide button also opens the remote Steam overlay.
+        // Keep that button on the stream path; use View+Menu for OpenNOW's menu.
+        const openNowMenuPressed = platformCapabilities.isAndroid
+          ? Boolean(pad.buttons[8]?.pressed && pad.buttons[9]?.pressed)
+          : Boolean(pad.buttons[16]?.pressed);
+        if (openNowMenuPressed && !prev.pressed) {
           setControllerOverlayOpen((v) => !v);
         }
-        prev.pressed = metaPressed;
+        prev.pressed = openNowMenuPressed;
       } catch {
         // ignore
       }
@@ -3971,6 +4014,7 @@ export function App(): JSX.Element {
             onAndroidTouchControlsChange={(value) => {
               void updateSetting("androidTouchControls", value);
             }}
+            lowPowerTouchControls={lowPowerAndroidTouchControls}
             onSendText={(text) => clientRef.current?.sendText(text) ?? 0}
             onSendKeyPress={(key) => {
               clientRef.current?.sendKeyPress(key);
