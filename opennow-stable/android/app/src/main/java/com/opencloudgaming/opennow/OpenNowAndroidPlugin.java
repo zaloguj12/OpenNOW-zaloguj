@@ -260,12 +260,14 @@ public class OpenNowAndroidPlugin extends Plugin {
             return;
         }
 
+        if (view.hasPointerCapture()) {
+            return;
+        }
+
         view.setFocusable(true);
         view.setFocusableInTouchMode(true);
         view.requestFocus();
-        if (!view.hasPointerCapture()) {
-            view.requestPointerCapture();
-        }
+        view.requestPointerCapture();
     }
 
     private void schedulePointerCaptureRefresh() {

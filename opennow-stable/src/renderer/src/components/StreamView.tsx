@@ -1576,6 +1576,13 @@ export function StreamView({
   const recordingTimerRef = useRef<number | undefined>(undefined);
   const thumbnailDataUrlRef = useRef<string | null>(null);
   const recCarouselRef = useRef<HTMLDivElement | null>(null);
+  const touchMouseMoveRef = useRef(onTouchMouseMove);
+  const touchMouseButtonRef = useRef(onTouchMouseButton);
+  const touchMouseWheelRef = useRef(onTouchMouseWheel);
+  touchMouseMoveRef.current = onTouchMouseMove;
+  touchMouseButtonRef.current = onTouchMouseButton;
+  touchMouseWheelRef.current = onTouchMouseWheel;
+  const hasNativeMouseMoveHandler = Boolean(onTouchMouseMove);
   const recordingApiAvailable =
     typeof openNow?.beginRecording === "function" &&
     typeof openNow?.sendRecordingChunk === "function" &&
@@ -1594,7 +1601,7 @@ export function StreamView({
       !isStreaming ||
       isConnecting ||
       !androidNativeMouseCapture ||
-      !onTouchMouseMove
+      !hasNativeMouseMoveHandler
     ) {
       return;
     }
@@ -1605,14 +1612,14 @@ export function StreamView({
       if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) {
         return;
       }
-      onTouchMouseMove({ dx, dy, timestampMs: event.timestampMs });
+      touchMouseMoveRef.current?.({ dx, dy, timestampMs: event.timestampMs });
     });
     const unsubscribeButton = openNow.onNativeMouseButton((event) => {
       const button = Number(event.button);
       if (!Number.isFinite(button)) {
         return;
       }
-      onTouchMouseButton?.({
+      touchMouseButtonRef.current?.({
         button,
         pressed: Boolean(event.pressed),
         timestampMs: event.timestampMs,
@@ -1623,7 +1630,7 @@ export function StreamView({
       if (!Number.isFinite(delta) || delta === 0) {
         return;
       }
-      onTouchMouseWheel?.({ delta, timestampMs: event.timestampMs });
+      touchMouseWheelRef.current?.({ delta, timestampMs: event.timestampMs });
     });
 
     void openNow.setNativePointerCapture(true);
@@ -1634,7 +1641,7 @@ export function StreamView({
       unsubscribeWheel();
       void openNow.setNativePointerCapture(false);
     };
-  }, [androidNativeMouseCapture, isConnecting, isStreaming, onTouchMouseButton, onTouchMouseMove, onTouchMouseWheel]);
+  }, [androidNativeMouseCapture, hasNativeMouseMoveHandler, isConnecting, isStreaming]);
 
   useEffect(() => {
     if (!platformCapabilities.isAndroid) {
