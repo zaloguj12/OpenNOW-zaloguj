@@ -89,6 +89,7 @@ const STATIC_ASPECT_RATIO_PRESETS: AspectRatioPreset[] = [
 
 const STATIC_RESOLUTION_PRESETS: ResolutionPreset[] = [
   { value: "1280x720", label: "720p (16:9)" },
+  { value: "1680x720", label: "Ultrawide 720p (21:9)" },
   { value: "1280x800", label: "720p (16:10)" },
   { value: "1440x900", label: "WXGA (16:10)" },
   { value: "1680x1050", label: "WSXGA (16:10)" },
@@ -229,6 +230,7 @@ function classifyAspectRatio(width: number, height: number): string {
 
 function friendlyResolutionName(width: number, height: number): string {
   if (width === 1280 && height === 720) return "720p (HD)";
+  if (width === 1680 && height === 720) return "1680x720 (UW)";
   if (width === 1920 && height === 1080) return "1080p (FHD)";
   if (width === 2560 && height === 1440) return "1440p (QHD)";
   if (width === 3840 && height === 2160) return "4K (UHD)";

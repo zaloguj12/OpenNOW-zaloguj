@@ -735,6 +735,7 @@ function TouchControllerOverlay({
   revealSignal?: number;
   lowPowerMode?: boolean;
 }): JSX.Element {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const controlsVisibleRef = useRef(true);
   const buttonsRef = useRef(0);
@@ -750,6 +751,31 @@ function TouchControllerOverlay({
   const activeTriggerPointersRef = useRef(new Map<number, "left" | "right">());
   const minEmitMs = lowPowerMode ? 33 : ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS;
   const keepaliveMs = lowPowerMode ? 500 : ANDROID_TOUCH_CONTROLLER_KEEPALIVE_MS;
+
+  useEffect(() => {
+    console.log("[AndroidTouchOverlay] React overlay initialized", {
+      placement: settings.placement,
+      size: settings.size,
+      opacity: settings.opacity,
+      lowPowerMode,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    const frame = window.requestAnimationFrame(() => {
+      const rect = overlayRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        console.warn("[AndroidTouchOverlay] React overlay has no measurable layout", {
+          rect: rect ? { width: rect.width, height: rect.height } : null,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          devicePixelRatio: window.devicePixelRatio,
+        });
+      }
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      console.log("[AndroidTouchOverlay] React overlay unmounted");
+    };
+  }, [lowPowerMode, settings.opacity, settings.placement, settings.size]);
 
   useEffect(() => {
     controlsVisibleRef.current = controlsVisible;
@@ -988,6 +1014,7 @@ function TouchControllerOverlay({
 
   return (
     <div
+      ref={overlayRef}
       className="sv-touch"
       data-placement={settings.placement}
       data-visible={controlsVisible ? "true" : "false"}
@@ -1402,10 +1429,10 @@ function AndroidStreamMenu({
             <input
               type="checkbox"
               checked={touchSettings.mousePad || preferMouseInput}
-              disabled={touchSettings.enabled && !preferMouseInput}
+              disabled={preferMouseInput}
               onChange={(event) => updateTouchSettings({ mousePad: event.target.checked })}
             />
-            <span><MousePointer2 size={14} /> {preferMouseInput ? "Finger mouse active" : touchSettings.enabled ? "Finger mouse paused" : "Finger mouse"}</span>
+            <span><MousePointer2 size={14} /> {preferMouseInput ? "Finger mouse required" : "Finger mouse"}</span>
           </label>
 
           <label className="sv-android-switch">
@@ -1763,22 +1790,80 @@ export function StreamView({
     () => normalizeAndroidTouchSettings(androidTouchControls),
     [androidTouchControls],
   );
+  const [androidNativeTouchAvailable, setAndroidNativeTouchAvailable] = useState(true);
+  const hasVirtualGamepadHandler = Boolean(onVirtualGamepadState);
+  const shouldAttemptAndroidNativeTouchControls =
+    platformCapabilities.isAndroid &&
+    lowPowerTouchControls &&
+    androidNativeTouchAvailable &&
+    !preferAndroidMouseInput &&
+    androidTouchSettings.enabled &&
+    hasVirtualGamepadHandler;
+  const shouldRenderReactAndroidTouchControls =
+    platformCapabilities.isAndroid &&
+    hasVirtualGamepadHandler &&
+    androidTouchSettings.enabled &&
+    !preferAndroidMouseInput &&
+    (!lowPowerTouchControls || !androidNativeTouchAvailable);
   const virtualGamepadStateRef = useRef(onVirtualGamepadState);
   virtualGamepadStateRef.current = onVirtualGamepadState;
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid) {
+      return;
+    }
+
+    console.log("[AndroidTouchOverlay] render gate", {
+      enabled: androidTouchSettings.enabled,
+      lowPowerTouchControls,
+      preferAndroidMouseInput,
+      nativeTouchAvailable: androidNativeTouchAvailable,
+      hasVirtualGamepadHandler,
+      hasNativeTouchApi: Boolean(openNow.setAndroidNativeTouchControls),
+      hasNativeTouchListener: Boolean(openNow.onAndroidNativeTouchGamepad),
+      reactOverlayWillRender: shouldRenderReactAndroidTouchControls,
+      nativeOverlayWillAttempt: shouldAttemptAndroidNativeTouchControls,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+  }, [
+    androidNativeTouchAvailable,
+    androidTouchSettings.enabled,
+    hasVirtualGamepadHandler,
+    lowPowerTouchControls,
+    preferAndroidMouseInput,
+    shouldAttemptAndroidNativeTouchControls,
+    shouldRenderReactAndroidTouchControls,
+  ]);
   useEffect(() => {
     if (
       !platformCapabilities.isAndroid ||
       !lowPowerTouchControls ||
       preferAndroidMouseInput ||
       !androidTouchSettings.enabled ||
-      !virtualGamepadStateRef.current ||
-      !openNow.setAndroidNativeTouchControls ||
-      !openNow.onAndroidNativeTouchGamepad
+      !virtualGamepadStateRef.current
     ) {
       return;
     }
 
+    if (!openNow.setAndroidNativeTouchControls || !openNow.onAndroidNativeTouchGamepad) {
+      console.warn("[AndroidTouchOverlay] Native touch controls unavailable; falling back to React overlay");
+      setAndroidNativeTouchAvailable(false);
+      return;
+    }
+
+    if (!androidNativeTouchAvailable) {
+      return;
+    }
+
     let lastNativeGamepadState: VirtualGamepadState | null = null;
+    let disposed = false;
+    console.log("[AndroidTouchOverlay] Native overlay initializing", {
+      placement: androidTouchSettings.placement,
+      size: androidTouchSettings.size,
+      opacity: androidTouchSettings.opacity,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
     const removeNativeTouchListener = openNow.onAndroidNativeTouchGamepad((event) => {
       lastNativeGamepadState = {
         connected: event.connected,
@@ -1802,9 +1887,21 @@ export function StreamView({
       size: androidTouchSettings.size,
       opacity: androidTouchSettings.opacity,
       placement: androidTouchSettings.placement,
+    }).then((attached) => {
+      if (disposed) {
+        return;
+      }
+      if (attached) {
+        console.log("[AndroidTouchOverlay] Native overlay attached");
+        return;
+      }
+      console.warn("[AndroidTouchOverlay] Native overlay did not attach; falling back to React overlay");
+      setAndroidNativeTouchAvailable(false);
+      virtualGamepadStateRef.current?.({ ...EMPTY_VIRTUAL_GAMEPAD_STATE, connected: false });
     });
 
     return () => {
+      disposed = true;
       window.clearInterval(keepalive);
       removeNativeTouchListener();
       void openNow.setAndroidNativeTouchControls?.({ enabled: false });
@@ -1815,6 +1912,7 @@ export function StreamView({
     androidTouchSettings.opacity,
     androidTouchSettings.placement,
     androidTouchSettings.size,
+    androidNativeTouchAvailable,
     lowPowerTouchControls,
     preferAndroidMouseInput,
   ]);
@@ -3154,7 +3252,7 @@ export function StreamView({
 
       {platformCapabilities.isAndroid && !isConnecting && (
         <>
-          {onVirtualGamepadState && androidTouchSettings.enabled && !lowPowerTouchControls && !preferAndroidMouseInput && (
+          {shouldRenderReactAndroidTouchControls && onVirtualGamepadState && (
             <TouchControllerOverlay
               onVirtualGamepadState={onVirtualGamepadState}
               settings={androidTouchSettings}

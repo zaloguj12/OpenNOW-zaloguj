@@ -809,7 +809,7 @@ export interface OpenNowApi {
   onNativeMouseButton(listener: (event: NativeMouseButtonEvent) => void): () => void;
   onNativeMouseWheel(listener: (event: NativeMouseWheelEvent) => void): () => void;
   getAndroidPerformanceInfo?(): Promise<AndroidPerformanceInfo>;
-  setAndroidNativeTouchControls?(options: AndroidNativeTouchControlsOptions): Promise<void>;
+  setAndroidNativeTouchControls?(options: AndroidNativeTouchControlsOptions): Promise<boolean>;
   onAndroidNativeTouchGamepad?(listener: (event: AndroidNativeTouchGamepadEvent) => void): () => void;
   consumeLaunchIntent(): Promise<AndroidLaunchIntent | null>;
   onLaunchIntent(listener: (event: AndroidLaunchIntent) => void): () => void;

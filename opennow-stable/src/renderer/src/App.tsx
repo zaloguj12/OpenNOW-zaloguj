@@ -70,7 +70,7 @@ import { QueueServerSelectModal } from "./components/QueueServerSelectModal";
 
 const codecOptions: VideoCodec[] = [...USER_FACING_VIDEO_CODEC_OPTIONS];
 const DEFAULT_STREAM_PREFERENCES = getDefaultStreamPreferences();
-const allResolutionOptions = ["1280x720", "1280x800", "1440x900", "1680x1050", "1920x1080", "1920x1200", "2560x1080", "2560x1440", "2560x1600", "3440x1440", "3840x2160", "3840x2400"];
+const allResolutionOptions = ["1280x720", "1680x720", "1280x800", "1440x900", "1680x1050", "1920x1080", "1920x1200", "2560x1080", "2560x1440", "2560x1600", "3440x1440", "3840x2160", "3840x2400"];
 const fpsOptions = [30, 60, 120, 144, 240];
 const aspectRatioOptions = ["16:9", "16:10", "21:9", "32:9"] as const;
 
@@ -188,7 +188,12 @@ function normalizeAndroidStreamResolution(resolution: string): string {
   }
 
   const ratio = width / height;
-  if (Math.abs(ratio - 16 / 9) < 0.01) {
+  const isSupportedAspect =
+    Math.abs(ratio - 16 / 9) < 0.01 ||
+    Math.abs(ratio - 16 / 10) < 0.01 ||
+    Math.abs(ratio - 21 / 9) < 0.025 ||
+    Math.abs(ratio - 32 / 9) < 0.025;
+  if (isSupportedAspect) {
     return resolution;
   }
 
@@ -256,6 +261,7 @@ async function migrateLegacyAndroidTouchSettings(settings: Settings): Promise<Se
 
 const RESOLUTION_TO_ASPECT_RATIO: Record<string, string> = {
   "1280x720": "16:9",
+  "1680x720": "21:9",
   "1280x800": "16:10",
   "1440x900": "16:10",
   "1680x1050": "16:10",

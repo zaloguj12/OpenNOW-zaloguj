@@ -1432,8 +1432,14 @@ const api: OpenNowApi = {
   onNativeMouseButton,
   onNativeMouseWheel,
   getAndroidPerformanceInfo: async (): Promise<AndroidPerformanceInfo> => OpenNowAndroid.getPerformanceInfo(),
-  setAndroidNativeTouchControls: async (options: AndroidNativeTouchControlsOptions): Promise<void> => {
-    await OpenNowAndroid.setNativeTouchControls(options).catch(() => undefined);
+  setAndroidNativeTouchControls: async (options: AndroidNativeTouchControlsOptions): Promise<boolean> => {
+    try {
+      const result = await OpenNowAndroid.setNativeTouchControls(options);
+      return Boolean(result.enabled);
+    } catch (error) {
+      console.warn("[AndroidTouchOverlay] Native touch controls call failed:", error);
+      return false;
+    }
   },
   onAndroidNativeTouchGamepad,
   consumeLaunchIntent: async (): Promise<AndroidLaunchIntent | null> => {
