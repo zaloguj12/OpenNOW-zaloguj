@@ -343,11 +343,11 @@
       "input": "Intrare",
       "interface": "Interfață",
       "about": "Despre",
-      "thanks": "Multumesc"
+      "thanks": "Mulțumiri"
     },
     "region": {
       "title": "Regiunea",
-      "autoBest": "Auto (cel mai bun)",
+      "autoBest": "Auto (cea mai bună)",
       "searchPlaceholder": "Caută regiuni...",
       "refreshPing": "Reîmprospătați ping-ul",
       "noRegionsMatch": "Nicio regiune nu corespunde cu „{{query}}”"
@@ -561,7 +561,7 @@
       "title": "Vă mulțumim că ați ajutat OpenNOW să crească",
       "subtitle": "OpenNOW este modelat de colaboratorii care construiesc clientul și susținătorii care susțin proiectul în culise.",
       "contributor": "Contributor",
-      "supporter": "Supporter",
+      "supporter": "Suporter",
       "communityDataUnavailable": "Community data unavailable",
       "contributorsTitle": "Colaboratori",
       "contributorsSubtitle": "Oameni care îmbunătățesc OpenNOW în cod, remedieri și funcții.",
