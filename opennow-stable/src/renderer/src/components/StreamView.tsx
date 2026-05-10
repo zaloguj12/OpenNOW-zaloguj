@@ -581,6 +581,15 @@ function shouldUseDomPointerCapture(): boolean {
   return !platformCapabilities.isAndroid;
 }
 
+function isAndroidTvLikeSurface(): boolean {
+  if (!platformCapabilities.isAndroid) return false;
+  const userAgent = navigator.userAgent ?? "";
+  return (
+    navigator.maxTouchPoints === 0 ||
+    /android tv|google tv|googletv|gtv|smart-?tv|bravia|aft\w*|shield android tv|crkey/i.test(userAgent)
+  );
+}
+
 function trySetPointerCapture(target: Element, pointerId: number): boolean {
   if (!shouldUseDomPointerCapture() || typeof target.setPointerCapture !== "function") {
     return false;
@@ -1790,18 +1799,25 @@ export function StreamView({
     () => normalizeAndroidTouchSettings(androidTouchControls),
     [androidTouchControls],
   );
+  const androidPhysicalGamepads = useStreamDiagnosticsSelector(
+    diagnosticsStore,
+    (stats) => stats.physicalGamepads,
+  );
   const [androidNativeTouchAvailable, setAndroidNativeTouchAvailable] = useState(true);
   const hasVirtualGamepadHandler = Boolean(onVirtualGamepadState);
+  const androidTouchSurfaceAvailable = !isAndroidTvLikeSurface() && androidPhysicalGamepads === 0;
   const shouldAttemptAndroidNativeTouchControls =
     platformCapabilities.isAndroid &&
     lowPowerTouchControls &&
     androidNativeTouchAvailable &&
+    androidTouchSurfaceAvailable &&
     !preferAndroidMouseInput &&
     androidTouchSettings.enabled &&
     hasVirtualGamepadHandler;
   const shouldRenderReactAndroidTouchControls =
     platformCapabilities.isAndroid &&
     hasVirtualGamepadHandler &&
+    androidTouchSurfaceAvailable &&
     androidTouchSettings.enabled &&
     !preferAndroidMouseInput &&
     (!lowPowerTouchControls || !androidNativeTouchAvailable);
@@ -1816,6 +1832,8 @@ export function StreamView({
       enabled: androidTouchSettings.enabled,
       lowPowerTouchControls,
       preferAndroidMouseInput,
+      physicalGamepads: androidPhysicalGamepads,
+      touchSurfaceAvailable: androidTouchSurfaceAvailable,
       nativeTouchAvailable: androidNativeTouchAvailable,
       hasVirtualGamepadHandler,
       hasNativeTouchApi: Boolean(openNow.setAndroidNativeTouchControls),
@@ -1827,7 +1845,9 @@ export function StreamView({
     });
   }, [
     androidNativeTouchAvailable,
+    androidPhysicalGamepads,
     androidTouchSettings.enabled,
+    androidTouchSurfaceAvailable,
     hasVirtualGamepadHandler,
     lowPowerTouchControls,
     preferAndroidMouseInput,
@@ -1839,6 +1859,7 @@ export function StreamView({
       !platformCapabilities.isAndroid ||
       !lowPowerTouchControls ||
       preferAndroidMouseInput ||
+      !androidTouchSurfaceAvailable ||
       !androidTouchSettings.enabled ||
       !virtualGamepadStateRef.current
     ) {
@@ -1913,13 +1934,10 @@ export function StreamView({
     androidTouchSettings.placement,
     androidTouchSettings.size,
     androidNativeTouchAvailable,
+    androidTouchSurfaceAvailable,
     lowPowerTouchControls,
     preferAndroidMouseInput,
   ]);
-  const androidPhysicalGamepads = useStreamDiagnosticsSelector(
-    diagnosticsStore,
-    (stats) => stats.physicalGamepads,
-  );
   const androidNativeMouseCapture = androidTouchSettings.mouseCapture && androidPhysicalGamepads === 0;
   const androidMousePadEnabled = androidTouchSettings.mousePad || preferAndroidMouseInput;
   const [androidMenuRevealSignal, setAndroidMenuRevealSignal] = useState(0);

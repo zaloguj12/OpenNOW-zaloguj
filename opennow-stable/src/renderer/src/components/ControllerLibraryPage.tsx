@@ -498,7 +498,13 @@ export function ControllerLibraryPage({
   }, [currentStreamingGame, selectedGame]);
 
   useEffect(() => {
-    if (!showGameHub || !selectedGame?.title || typeof openNow?.listMediaByGame !== "function") {
+    const skipAndroidAllMediaPreview = platformCapabilities.isAndroid && topCategory === "all";
+    if (
+      skipAndroidAllMediaPreview ||
+      !showGameHub ||
+      !selectedGame?.title ||
+      typeof openNow?.listMediaByGame !== "function"
+    ) {
       setGameHubMedia([]);
       setGameHubMediaLoading(false);
       return;
@@ -555,7 +561,7 @@ export function ControllerLibraryPage({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [selectedGame?.id, selectedGame?.title, showGameHub]);
+  }, [selectedGame?.id, selectedGame?.title, showGameHub, topCategory]);
 
 
 

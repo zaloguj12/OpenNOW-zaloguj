@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 import { createPortal } from "react-dom";
+import { App as CapacitorApp } from "@capacitor/app";
 
 import type {
   ActiveSessionInfo,
@@ -1379,10 +1380,6 @@ export function App(): JSX.Element {
       window.dispatchEvent(new CustomEvent("opennow:controller-direction", { detail: { direction } }));
       return true;
     }
-    if (settings.controllerMode && currentPage === "settings") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-direction", { detail: { direction } }));
-      return true;
-    }
     return false;
   }, [authSession, currentPage, settings.controllerMode, streamStatus]);
 
@@ -1395,10 +1392,6 @@ export function App(): JSX.Element {
       return false;
     }
     if (settings.controllerMode && currentPage === "library") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-activate"));
-      return true;
-    }
-    if (settings.controllerMode && currentPage === "settings") {
       window.dispatchEvent(new CustomEvent("opennow:controller-activate"));
       return true;
     }
@@ -1417,10 +1410,6 @@ export function App(): JSX.Element {
       window.dispatchEvent(new CustomEvent("opennow:controller-secondary-activate"));
       return true;
     }
-    if (settings.controllerMode && currentPage === "settings") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-secondary-activate"));
-      return true;
-    }
     return false;
   }, [authSession, currentPage, settings.controllerMode, streamStatus]);
 
@@ -1433,10 +1422,6 @@ export function App(): JSX.Element {
       return false;
     }
     if (settings.controllerMode && currentPage === "library") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-tertiary-activate"));
-      return true;
-    }
-    if (settings.controllerMode && currentPage === "settings") {
       window.dispatchEvent(new CustomEvent("opennow:controller-tertiary-activate"));
       return true;
     }
@@ -1468,6 +1453,33 @@ export function App(): JSX.Element {
     onSecondaryActivateInput: handleControllerSecondaryActivateInput,
     onTertiaryActivateInput: handleControllerTertiaryActivateInput,
   });
+
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid) return;
+
+    let cancelled = false;
+    let removeListener: (() => void) | null = null;
+
+    void CapacitorApp.addListener("backButton", () => {
+      handleControllerBackAction();
+    }).then((handle) => {
+      if (cancelled) {
+        void handle.remove();
+        return;
+      }
+      removeListener = () => {
+        void handle.remove();
+      };
+    }).catch((error) => {
+      console.warn("[Android] Failed to register back-button handler:", error);
+    });
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
+  }, [handleControllerBackAction]);
+
   const showControllerHint = controllerUiActive
     && controllerConnected
     && !(settings.controllerMode && currentPage === "library");
@@ -3414,6 +3426,16 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!logoutConfirmOpen) return;
 
+    const focusFirstAction = window.setTimeout(() => {
+      const firstAction = document.querySelector<HTMLElement>(".logout-confirm-btn-cancel");
+      if (!firstAction) return;
+      document.querySelectorAll<HTMLElement>(".controller-focus").forEach((node) => {
+        node.classList.remove("controller-focus");
+      });
+      firstAction.classList.add("controller-focus");
+      firstAction.focus({ preventScroll: true });
+    }, 0);
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setLogoutConfirmOpen(false);
@@ -3429,6 +3451,7 @@ export function App(): JSX.Element {
     document.body.style.overflow = "hidden";
 
     return () => {
+      window.clearTimeout(focusFirstAction);
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
     };
@@ -3440,6 +3463,7 @@ export function App(): JSX.Element {
           <button
             type="button"
             className="logout-confirm-backdrop"
+            tabIndex={-1}
             onClick={() => setLogoutConfirmOpen(false)}
             aria-label="Cancel log out"
           />
