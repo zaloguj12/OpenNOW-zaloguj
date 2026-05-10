@@ -1002,6 +1002,8 @@ export interface AppUpdaterProgress {
 export interface AppUpdaterState {
   status: AppUpdaterStatus;
   currentVersion: string;
+  currentDisplayVersion?: string;
+  currentBuildNumber?: string;
   availableVersion?: string;
   downloadedVersion?: string;
   progress?: AppUpdaterProgress;

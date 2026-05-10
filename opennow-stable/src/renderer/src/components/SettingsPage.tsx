@@ -709,6 +709,7 @@ export function SettingsPage({ settings, regions, onSettingChange, codecResults,
   const [updaterState, setUpdaterState] = useState<AppUpdaterState>({
     status: "idle",
     currentVersion: "0.0.0",
+    currentDisplayVersion: "0.0.0",
     updateSource: "github-releases",
     canCheck: false,
     canDownload: false,
@@ -3497,7 +3498,7 @@ export function SettingsPage({ settings, regions, onSettingChange, codecResults,
                     </span>
                   </span>
                   <span className="settings-hint">
-                    {t("settings.about.version", { version: updaterState.currentVersion })} · {settings.autoCheckForUpdates
+                    {t("settings.about.version", { version: updaterState.currentDisplayVersion ?? updaterState.currentVersion })} · {settings.autoCheckForUpdates
                       ? t("settings.about.backgroundChecksOn")
                       : t("settings.about.backgroundChecksOff")}
                   </span>
