@@ -194,10 +194,10 @@
     "status": {
       "gameLaunchFailed": "Lansarea jocului a eșuat",
       "queuePaused": "Coada de sesiune a fost întreruptă",
-      "positionInQueue": "Poziționați #{{position}} în coadă",
-      "waitingInQueue": "Aștept la coadă...",
+      "positionInQueue": "Poziția #{{position}} în coadă",
+      "waitingInQueue": "Aşteptare în coadă...",
       "settingUpRig": "Configurarea platformei de jocuri...",
-      "startingStream": "Se începe fluxul...",
+      "startingStream": "Se pornește fluxul...",
       "connectingToServer": "Se conectează la server...",
       "settingUpStream": "Se configurează fluxul...",
       "loading": "Se încarcă..."
