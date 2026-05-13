@@ -1101,9 +1101,9 @@ app.whenReady().then(async () => {
 
   await cacheManager.initialize();
 
-  authService = new AuthService(join(app.getPath("userData"), "auth-state.json"), {
-    openExternal: (url) => shell.openExternal(url),
-  });
+  authService = new AuthService(
+    join(app.getPath("userData"), "auth-state.json"),
+  );
   await authService.initialize();
 
   settingsManager = getSettingsManager();

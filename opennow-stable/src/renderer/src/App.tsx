@@ -24,12 +24,8 @@ import type {
 } from "@shared/gfn";
 import {
   buildNativeStreamerSessionContext,
-  DEFAULT_SHORTCUTS,
-  DEFAULT_SETTINGS,
-  getPreferredSessionAdMediaUrl,
-  getSessionAdDurationMs,
-  getSessionAdItems,
-  getSessionAdOpportunity,
+  DEFAULT_KEYBOARD_LAYOUT,
+  getDefaultStreamPreferences,
   isSessionAdsRequired,
 } from "@shared/gfn";
 import { GfnWebRtcClient } from "./gfn/webrtcClient";
@@ -100,6 +96,8 @@ import { ControllerStreamLoading } from "./components/controllerMode/ControllerS
 import { StreamView } from "./components/StreamView";
 import { QueueServerSelectModal } from "./components/QueueServerSelectModal";
 
+const DEFAULT_STREAM_PREFERENCES = getDefaultStreamPreferences();
+
 type AppStyle = CSSProperties & {
   "--game-poster-scale"?: string;
 };
@@ -117,7 +115,6 @@ const FREE_TIER_30_MIN_WARNING_SECONDS = 30 * 60;
 const FREE_TIER_15_MIN_WARNING_SECONDS = 15 * 60;
 const FREE_TIER_FINAL_MINUTE_WARNING_SECONDS = 60;
 const STREAM_WARNING_VISIBILITY_MS = 15 * 1000;
-const isWebOsRuntime = import.meta.env.VITE_OPENNOW_RUNTIME === "webos";
 
 type AppPage = "home" | "library" | "settings";
 type ExitPromptState = { open: boolean; gameTitle: string };
@@ -137,6 +134,18 @@ const SIGNALING_REMOTE_ICE_GRACE_MS = 5000;
 const ICE_DISCONNECTED_RECOVERY_GRACE_MS = 7000;
 
 const isMac = navigator.platform.toLowerCase().includes("mac");
+
+const DEFAULT_SHORTCUTS = {
+  shortcutToggleStats: "F3",
+  shortcutTogglePointerLock: "F8",
+  shortcutToggleFullscreen: "F10",
+  shortcutStopStream: "Ctrl+Shift+Q",
+  shortcutToggleAntiAfk: "Ctrl+Shift+K",
+  shortcutToggleMicrophone: "Ctrl+Shift+M",
+  shortcutScreenshot: "F11",
+  shortcutToggleRecording: "F12",
+} as const;
+
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -197,7 +206,63 @@ export function App(): JSX.Element {
 
   // Settings State
   const [settings, setSettings] = useState<Settings>({
-    ...DEFAULT_SETTINGS,
+    resolution: "1920x1080",
+    aspectRatio: "16:9",
+    posterSizeScale: 1,
+    fps: 60,
+    maxBitrateMbps: 75,
+    streamClientMode: "web",
+    nativeStreamerBackend: "gstreamer",
+    nativeVideoBackend: "auto",
+    nativeStreamerExecutablePath: "",
+    nativeCloudGsyncMode: "auto",
+    nativeD3dFullscreenMode: "auto",
+    nativeExternalRenderer: true,
+    codec: DEFAULT_STREAM_PREFERENCES.codec,
+    decoderPreference: "auto",
+    encoderPreference: "auto",
+    colorQuality: DEFAULT_STREAM_PREFERENCES.colorQuality,
+    region: "",
+    sessionProxyEnabled: false,
+    sessionProxyUrl: "",
+    clipboardPaste: false,
+    mouseSensitivity: 1,
+    mouseAcceleration: 1,
+    shortcutToggleStats: DEFAULT_SHORTCUTS.shortcutToggleStats,
+    shortcutTogglePointerLock: DEFAULT_SHORTCUTS.shortcutTogglePointerLock,
+    shortcutToggleFullscreen: DEFAULT_SHORTCUTS.shortcutToggleFullscreen,
+    shortcutStopStream: DEFAULT_SHORTCUTS.shortcutStopStream,
+    shortcutToggleAntiAfk: DEFAULT_SHORTCUTS.shortcutToggleAntiAfk,
+    shortcutToggleMicrophone: DEFAULT_SHORTCUTS.shortcutToggleMicrophone,
+    shortcutScreenshot: DEFAULT_SHORTCUTS.shortcutScreenshot,
+    shortcutToggleRecording: DEFAULT_SHORTCUTS.shortcutToggleRecording,
+    microphoneMode: "disabled",
+    microphoneDeviceId: "",
+    hideStreamButtons: false,
+    showAntiAfkIndicator: true,
+    showStatsOnLaunch: false,
+    hideServerSelector: false,
+    appAccentColor: "green",
+    controllerMode: false,
+    controllerUiSounds: false,
+    controllerBackgroundAnimations: false,
+    controllerThemeStyle: "aurora",
+    controllerThemeColor: { r: 124, g: 241, b: 177 },
+    controllerLibraryGameBackdrop: true,
+    autoLoadControllerLibrary: false,
+    autoFullScreen: false,
+    favoriteGameIds: [],
+    sessionCounterEnabled: false,
+    sessionClockShowEveryMinutes: 60,
+    sessionClockShowDurationSeconds: 30,
+    windowWidth: 1400,
+    windowHeight: 900,
+    keyboardLayout: DEFAULT_KEYBOARD_LAYOUT,
+    gameLanguage: "en_US",
+    enableL4S: false,
+    enableCloudGsync: false,
+    discordRichPresence: false,
+    autoCheckForUpdates: true,
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [codecResults, setCodecResults] = useState<CodecTestResult[] | null>(() => loadStoredCodecResults());
@@ -433,7 +498,7 @@ export function App(): JSX.Element {
   const controllerUiActive = controllerDesktopModeActive || controllerOverlayOpen;
 
   const controllerConnected = useControllerNavigation({
-    enabled: controllerUiActive || !authSession || isWebOsRuntime,
+    enabled: controllerUiActive,
     onNavigatePage: handleControllerPageNavigate,
     onBackAction: handleControllerBackAction,
     onDirectionInput: handleControllerDirectionInput,
@@ -880,11 +945,9 @@ export function App(): JSX.Element {
   }, [streamStatus, queuePosition, launchError, streamingGame, streamingStore]);
 
   useEffect(() => {
-    document.body.classList.toggle("controller-mode", controllerUiActive || isWebOsRuntime);
-    document.body.classList.toggle("webos-mode", isWebOsRuntime);
+    document.body.classList.toggle("controller-mode", controllerUiActive);
     return () => {
       document.body.classList.remove("controller-mode");
-      document.body.classList.remove("webos-mode");
     };
   }, [controllerUiActive]);
 
@@ -3773,7 +3836,7 @@ export function App(): JSX.Element {
 
   // Main app layout
   return (
-    <div className={`app-container ${isWebOsRuntime ? "webos-shell" : ""}`} style={getAppStyle(settings.posterSizeScale)}>
+    <div className="app-container" style={getAppStyle(settings.posterSizeScale)}>
       {startupRefreshNotice && (
         <div className={`auth-refresh-notice auth-refresh-notice--${startupRefreshNotice.tone}`}>
           {startupRefreshNotice.text}

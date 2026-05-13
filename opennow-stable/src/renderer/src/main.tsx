@@ -5,15 +5,11 @@ import { scan } from "react-scan";
 import { initLogCapture } from "@shared/logger";
 import { App } from "./App";
 import { initializeLocale } from "./i18n";
-import { installWebOsRuntime } from "./platform/webos/runtime";
 import "./styles.css";
 
 // Initialize log capture for renderer process
 initLogCapture("renderer");
 void initializeLocale();
-installWebOsRuntime();
-void initializeLocale();
-installWebOsRuntime();
 
 if (import.meta.env.DEV) {
   scan();
