@@ -11,14 +11,12 @@ import type {
   PrintedWasteServerMapping,
   RecordingBeginResult,
   RecordingEntry,
-  SavedAccount,
   ScreenshotEntry,
   Settings,
   StreamRegion,
   ThankYouDataResult,
 } from "@shared/gfn";
-import { DEFAULT_SETTINGS, createUnsupportedNativeStreamerStatus } from "@shared/gfn";
-import { unsupportedNativeCloudGsyncCapabilities } from "@shared/cloudGsync";
+import { DEFAULT_SETTINGS } from "@shared/gfn";
 import { parseSerializedSessionErrorTransport } from "@shared/sessionError";
 
 const WEBOS_RUNTIME = import.meta.env.VITE_OPENNOW_RUNTIME === "webos";
@@ -260,10 +258,6 @@ function createWebOsApi(): OpenNowApi {
     getRegions: (input = {}) => callService("getRegions", { input }),
     login: (input) => callService("login", { input }, 120_000),
     logout: () => callService<void>("logout", {}).catch(() => undefined),
-    logoutAll: () => callService<void>("logoutAll", {}).catch(() => undefined),
-    getSavedAccounts: () => callService<SavedAccount[]>("getSavedAccounts", {}).catch(() => []),
-    switchAccount: (userId) => callService("switchAccount", { userId }),
-    removeAccount: (userId) => callService<void>("removeAccount", { userId }).catch(() => undefined),
     fetchSubscription: (input) => callService("fetchSubscription", { input }),
     fetchMainGames: (input) => callService("fetchMainGames", { input }),
     fetchLibraryGames: (input) => callService("fetchLibraryGames", { input }),
@@ -276,15 +270,11 @@ function createWebOsApi(): OpenNowApi {
     stopSession: (input) => callService("stopSession", { input }),
     getActiveSessions: (token, streamingBaseUrl) => callService("getActiveSessions", { token, streamingBaseUrl }),
     claimSession: (input) => callService("claimSession", { input }),
-    getNativeStreamerStatus: async () => createUnsupportedNativeStreamerStatus(),
-    getNativeCloudGsyncCapabilities: async () => unsupportedNativeCloudGsyncCapabilities("webOS runtime"),
     showSessionConflictDialog: async () => "resume",
     connectSignaling: (input) => callService("connectSignaling", { input }),
     disconnectSignaling: () => callService("disconnectSignaling", {}),
     sendAnswer: (input) => callService("sendAnswer", { input }),
     sendIceCandidate: (input) => callService("sendIceCandidate", { input }),
-    sendNativeInput: () => undefined,
-    updateNativeRenderSurface: () => undefined,
     requestKeyframe: (input) => callService("requestKeyframe", { input }),
     onSignalingEvent: (listener: (event: MainToRendererSignalingEvent) => void) =>
       subscribeService<MainToRendererSignalingEvent>("signalingEvents", {}, listener),
@@ -318,7 +308,6 @@ function createWebOsApi(): OpenNowApi {
         document.body.requestPointerLock?.();
       }
     },
-    notifyPointerLockChange: () => undefined,
     getSettings: async () => readSettings(),
     setSetting: async (key, value) => {
       const settings = readSettings();
@@ -328,7 +317,6 @@ function createWebOsApi(): OpenNowApi {
       writeSettings(WEBOS_DEFAULT_SETTINGS);
       return readSettings();
     },
-    selectNativeStreamerExecutable: async () => null,
     getMicrophonePermission: async (): Promise<MicrophonePermissionResult> => ({
       platform: "unknown",
       isMacOs: false,
@@ -359,7 +347,6 @@ function createWebOsApi(): OpenNowApi {
     },
     saveScreenshotAs: async () => ({ saved: false }),
     onTriggerScreenshot: () => () => undefined,
-    onExternalEscape: () => () => undefined,
     beginRecording: () => unsupported<RecordingBeginResult>("Stream recording"),
     sendRecordingChunk: () => unsupported<void>("Stream recording"),
     finishRecording: () => unsupported<RecordingEntry>("Stream recording"),
@@ -376,9 +363,6 @@ function createWebOsApi(): OpenNowApi {
     },
     getMediaThumbnail: async () => null,
     showMediaInFolder: () => unsupported<void>("Opening media in a folder"),
-    getMediaPlaybackUrl: async () => null,
-    deleteMediaFile: async () => ({ ok: false }),
-    regenMediaThumbnail: async () => ({ ok: false, thumbnailDataUrl: null }),
     deleteCache: async () => {
       localStorage.removeItem(SCREENSHOT_STORAGE_KEY);
     },
@@ -387,7 +371,6 @@ function createWebOsApi(): OpenNowApi {
     fetchPrintedWasteServerMapping: (): Promise<PrintedWasteServerMapping> =>
       callService<PrintedWasteServerMapping>("fetchPrintedWasteServerMapping", {}).catch(() => fetchJson<PrintedWasteServerMapping>("https://remote.printedwaste.com/config/GFN_SERVERID_TO_REGION_MAPPING")),
     getThanksData: () => callService<ThankYouDataResult>("getThanksData", {}),
-    clearDiscordActivity: async () => undefined,
   };
 }
 
