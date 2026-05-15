@@ -24,7 +24,8 @@ import {
 } from "../gfn/inputProtocol";
 import { getStoreDisplayName, getStoreIconComponent } from "./GameCard";
 import { RemainingPlaytimeIndicator, SessionElapsedIndicator } from "./ElapsedSessionIndicators";
-import type { MicrophoneMode, ScreenshotEntry, RecordingEntry, SubscriptionInfo } from "@shared/gfn";
+import type { AndroidTouchPlacement, AndroidTouchSettings, MicrophoneMode, ScreenshotEntry, RecordingEntry, SubscriptionInfo } from "@shared/gfn";
+import { normalizeAndroidTouchSettings } from "@shared/settings";
 import { formatShortcutForDisplay, isShortcutMatch, normalizeShortcut, shortcutFromKeyboardEvent } from "../shortcuts";
 import { openNow, platformCapabilities } from "../platform";
 import { useElapsedSeconds } from "../utils/useElapsedSeconds";
@@ -84,14 +85,20 @@ interface StreamViewProps {
   onVirtualGamepadState?: (state: VirtualGamepadState) => void;
   onTouchMouseMove?: (input: { dx: number; dy: number; timestampMs?: number }) => void;
   onTouchMouseTap?: (input: { timestampMs?: number }) => void;
+  onTouchMouseButton?: (input: { button: number; pressed: boolean; timestampMs?: number }) => void;
+  onTouchMouseWheel?: (input: { delta: number; timestampMs?: number }) => void;
   onSendText?: (text: string) => number;
-  onSendKeyPress?: (key: "Backspace" | "Enter") => void;
+  onSendKeyPress?: (key: "Backspace" | "Enter" | "Escape") => void;
+  androidTouchControls: AndroidTouchSettings;
+  onAndroidTouchControlsChange: (settings: AndroidTouchSettings) => void;
   microphoneMode: MicrophoneMode;
   onMicrophoneModeChange: (value: MicrophoneMode) => void;
   onScreenshotShortcutChange: (value: string) => void;
   onRecordingShortcutChange: (value: string) => void;
   subscriptionInfo: SubscriptionInfo | null;
   micTrack?: MediaStreamTrack | null;
+  lowPowerTouchControls?: boolean;
+  preferAndroidMouseInput?: boolean;
   className?: string;
 }
 
@@ -557,25 +564,11 @@ function VideoFocusOnReady({
 }
 
 type StickValue = { x: number; y: number };
-type TouchPlacement = "default" | "compact" | "lower" | "split";
-type AndroidTouchSettings = {
-  enabled: boolean;
-  size: number;
-  opacity: number;
-  placement: TouchPlacement;
-  mousePad: boolean;
-  mouseCapture: boolean;
-};
-
-const ANDROID_TOUCH_SETTINGS_KEY = "opennow.android.touchControls.v1";
-const DEFAULT_ANDROID_TOUCH_SETTINGS: AndroidTouchSettings = {
-  enabled: true,
-  size: 1,
-  opacity: 0.74,
-  placement: "default",
-  mousePad: true,
-  mouseCapture: true,
-};
+const ANDROID_TOUCH_CONTROLLER_IDLE_DISCONNECT_MS = 3000;
+const ANDROID_TOUCH_CONTROLLER_IDLE_HIDE_MS = 3500;
+const ANDROID_TOUCH_CONTROLLER_KEEPALIVE_MS = 250;
+const ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS = 24;
+const ANDROID_TOUCH_STICK_STEP = 0.01;
 
 function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) {
@@ -584,51 +577,89 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function readAndroidTouchSettings(): AndroidTouchSettings {
-  if (typeof window === "undefined") {
-    return DEFAULT_ANDROID_TOUCH_SETTINGS;
+function shouldUseDomPointerCapture(): boolean {
+  return !platformCapabilities.isAndroid;
+}
+
+function isAndroidTvLikeSurface(): boolean {
+  if (!platformCapabilities.isAndroid) return false;
+  const userAgent = navigator.userAgent ?? "";
+  return (
+    navigator.maxTouchPoints === 0 ||
+    /android tv|google tv|googletv|gtv|smart-?tv|bravia|aft\w*|shield android tv|crkey/i.test(userAgent)
+  );
+}
+
+function trySetPointerCapture(target: Element, pointerId: number): boolean {
+  if (!shouldUseDomPointerCapture() || typeof target.setPointerCapture !== "function") {
+    return false;
   }
 
   try {
-    const raw = window.localStorage.getItem(ANDROID_TOUCH_SETTINGS_KEY);
-    if (!raw) {
-      return DEFAULT_ANDROID_TOUCH_SETTINGS;
-    }
-    const parsed = JSON.parse(raw) as Partial<AndroidTouchSettings>;
-    const placements: TouchPlacement[] = ["default", "compact", "lower", "split"];
-    return {
-      enabled: parsed.enabled ?? DEFAULT_ANDROID_TOUCH_SETTINGS.enabled,
-      size: clampNumber(Number(parsed.size ?? DEFAULT_ANDROID_TOUCH_SETTINGS.size), 0.72, 1.35),
-      opacity: clampNumber(Number(parsed.opacity ?? DEFAULT_ANDROID_TOUCH_SETTINGS.opacity), 0.25, 1),
-      placement: placements.includes(parsed.placement as TouchPlacement)
-        ? parsed.placement as TouchPlacement
-        : DEFAULT_ANDROID_TOUCH_SETTINGS.placement,
-      mousePad: parsed.mousePad ?? DEFAULT_ANDROID_TOUCH_SETTINGS.mousePad,
-      mouseCapture: parsed.mouseCapture ?? DEFAULT_ANDROID_TOUCH_SETTINGS.mouseCapture,
-    };
+    target.setPointerCapture(pointerId);
+    return typeof target.hasPointerCapture === "function" && target.hasPointerCapture(pointerId);
   } catch {
-    return DEFAULT_ANDROID_TOUCH_SETTINGS;
+    return false;
   }
 }
 
-function writeAndroidTouchSettings(settings: AndroidTouchSettings): void {
-  try {
-    window.localStorage.setItem(ANDROID_TOUCH_SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    // Non-fatal; controls remain usable for the current session.
+function tryReleasePointerCapture(target: Element, pointerId: number): void {
+  if (!shouldUseDomPointerCapture() || typeof target.releasePointerCapture !== "function") {
+    return;
   }
+
+  try {
+    if (typeof target.hasPointerCapture !== "function" || target.hasPointerCapture(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+  } catch {
+    // Android WebView can throw InvalidStateError for stale/non-captured pointers.
+  }
+}
+
+function hasActivePointer(target: Element, pointerId: number, activePointerId: number | null): boolean {
+  if (activePointerId === pointerId) {
+    return true;
+  }
+
+  try {
+    return typeof target.hasPointerCapture === "function" && target.hasPointerCapture(pointerId);
+  } catch {
+    return false;
+  }
+}
+
+function quantizeTouchStickValue(value: StickValue): StickValue {
+  const quantizeAxis = (axis: number) => {
+    if (Math.abs(axis) < ANDROID_TOUCH_STICK_STEP) {
+      return 0;
+    }
+    return Math.round(axis / ANDROID_TOUCH_STICK_STEP) * ANDROID_TOUCH_STICK_STEP;
+  };
+  return { x: quantizeAxis(value.x), y: quantizeAxis(value.y) };
 }
 
 function TouchStick({
   label,
-  value,
   onChange,
 }: {
   label: string;
-  value: StickValue;
   onChange: (value: StickValue) => void;
 }): JSX.Element {
   const baseRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+
+  const setThumbPosition = useCallback((value: StickValue) => {
+    if (thumbRef.current) {
+      thumbRef.current.style.transform = `translate(${value.x * 28}px, ${value.y * 28}px)`;
+    }
+  }, []);
+
+  const updateStick = useCallback((value: StickValue) => {
+    setThumbPosition(value);
+    onChange(value);
+  }, [onChange, setThumbPosition]);
 
   const updateFromPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rect = baseRef.current?.getBoundingClientRect();
@@ -640,8 +671,25 @@ function TouchStick({
     const rawY = (event.clientY - centerY) / radius;
     const magnitude = Math.hypot(rawX, rawY);
     const scale = magnitude > 1 ? 1 / magnitude : 1;
-    onChange({ x: rawX * scale, y: rawY * scale });
-  }, [onChange]);
+    updateStick(quantizeTouchStickValue({ x: rawX * scale, y: rawY * scale }));
+  }, [updateStick]);
+
+  useEffect(() => {
+    const releasePointer = (event: PointerEvent) => {
+      if (activePointerIdRef.current !== event.pointerId) {
+        return;
+      }
+      activePointerIdRef.current = null;
+      updateStick({ x: 0, y: 0 });
+    };
+
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", releasePointer);
+    return () => {
+      window.removeEventListener("pointerup", releasePointer);
+      window.removeEventListener("pointercancel", releasePointer);
+    };
+  }, [updateStick]);
 
   return (
     <div
@@ -649,34 +697,37 @@ function TouchStick({
       className="sv-touch-stick"
       onPointerDown={(event) => {
         event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        activePointerIdRef.current = event.pointerId;
+        trySetPointerCapture(event.currentTarget, event.pointerId);
         updateFromPointer(event);
       }}
       onPointerMove={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        if (hasActivePointer(event.currentTarget, event.pointerId, activePointerIdRef.current)) {
           event.preventDefault();
           updateFromPointer(event);
         }
       }}
       onPointerUp={(event) => {
-        event.preventDefault();
-        event.currentTarget.releasePointerCapture(event.pointerId);
-        onChange({ x: 0, y: 0 });
+        if (hasActivePointer(event.currentTarget, event.pointerId, activePointerIdRef.current)) {
+          event.preventDefault();
+          tryReleasePointerCapture(event.currentTarget, event.pointerId);
+          activePointerIdRef.current = null;
+          updateStick({ x: 0, y: 0 });
+        }
       }}
       onPointerCancel={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
+        if (hasActivePointer(event.currentTarget, event.pointerId, activePointerIdRef.current)) {
+          tryReleasePointerCapture(event.currentTarget, event.pointerId);
+          activePointerIdRef.current = null;
+          updateStick({ x: 0, y: 0 });
         }
-        onChange({ x: 0, y: 0 });
       }}
       aria-label={label}
       role="application"
     >
       <span
+        ref={thumbRef}
         className="sv-touch-stick-thumb"
-        style={{
-          transform: `translate(${value.x * 28}px, ${value.y * 28}px)`,
-        }}
       />
     </div>
   );
@@ -685,18 +736,77 @@ function TouchStick({
 function TouchControllerOverlay({
   onVirtualGamepadState,
   settings,
+  revealSignal,
+  lowPowerMode = false,
 }: {
   onVirtualGamepadState: (state: VirtualGamepadState) => void;
   settings: AndroidTouchSettings;
+  revealSignal?: number;
+  lowPowerMode?: boolean;
 }): JSX.Element {
-  const [leftStick, setLeftStick] = useState<StickValue>({ x: 0, y: 0 });
-  const [rightStick, setRightStick] = useState<StickValue>({ x: 0, y: 0 });
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const controlsVisibleRef = useRef(true);
   const buttonsRef = useRef(0);
   const triggersRef = useRef({ left: 0, right: 0 });
-  const leftStickRef = useRef(leftStick);
-  const rightStickRef = useRef(rightStick);
+  const leftStickRef = useRef<StickValue>({ x: 0, y: 0 });
+  const rightStickRef = useRef<StickValue>({ x: 0, y: 0 });
+  const virtualConnectedRef = useRef(false);
+  const lastTouchActivityMsRef = useRef(0);
+  const lastEmitMsRef = useRef(0);
+  const pendingEmitRef = useRef<number | null>(null);
+  const hideControlsTimerRef = useRef<number | null>(null);
+  const activeButtonPointersRef = useRef(new Map<number, number>());
+  const activeTriggerPointersRef = useRef(new Map<number, "left" | "right">());
+  const minEmitMs = lowPowerMode ? 33 : ANDROID_TOUCH_CONTROLLER_MIN_EMIT_MS;
+  const keepaliveMs = lowPowerMode ? 500 : ANDROID_TOUCH_CONTROLLER_KEEPALIVE_MS;
 
-  const emit = useCallback((connected = true) => {
+  useEffect(() => {
+    console.log("[AndroidTouchOverlay] React overlay initialized", {
+      placement: settings.placement,
+      size: settings.size,
+      opacity: settings.opacity,
+      lowPowerMode,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    const frame = window.requestAnimationFrame(() => {
+      const rect = overlayRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) {
+        console.warn("[AndroidTouchOverlay] React overlay has no measurable layout", {
+          rect: rect ? { width: rect.width, height: rect.height } : null,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          devicePixelRatio: window.devicePixelRatio,
+        });
+      }
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      console.log("[AndroidTouchOverlay] React overlay unmounted");
+    };
+  }, [lowPowerMode, settings.opacity, settings.placement, settings.size]);
+
+  useEffect(() => {
+    controlsVisibleRef.current = controlsVisible;
+  }, [controlsVisible]);
+
+  const isNeutral = useCallback(() => (
+    buttonsRef.current === 0 &&
+    triggersRef.current.left === 0 &&
+    triggersRef.current.right === 0 &&
+    leftStickRef.current.x === 0 &&
+    leftStickRef.current.y === 0 &&
+    rightStickRef.current.x === 0 &&
+    rightStickRef.current.y === 0
+  ), []);
+
+  const emitNow = useCallback((connected = virtualConnectedRef.current) => {
+    if (pendingEmitRef.current !== null) {
+      window.clearTimeout(pendingEmitRef.current);
+      pendingEmitRef.current = null;
+    }
+    lastEmitMsRef.current = performance.now();
+    virtualConnectedRef.current = connected;
     onVirtualGamepadState({
       connected,
       buttons: connected ? buttonsRef.current : 0,
@@ -709,84 +819,215 @@ function TouchControllerOverlay({
     });
   }, [onVirtualGamepadState]);
 
+  const scheduleControlsHide = useCallback(() => {
+    if (hideControlsTimerRef.current !== null) {
+      window.clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
+    hideControlsTimerRef.current = window.setTimeout(() => {
+      hideControlsTimerRef.current = null;
+      if (isNeutral()) {
+        setControlsVisible(false);
+      }
+    }, ANDROID_TOUCH_CONTROLLER_IDLE_HIDE_MS);
+  }, [isNeutral]);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    scheduleControlsHide();
+  }, [scheduleControlsHide]);
+
+  const scheduleEmit = useCallback((connected = virtualConnectedRef.current, immediate = false) => {
+    if (immediate) {
+      emitNow(connected);
+      return;
+    }
+
+    const now = performance.now();
+    const elapsed = now - lastEmitMsRef.current;
+    if (elapsed >= minEmitMs) {
+      emitNow(connected);
+      return;
+    }
+
+    if (pendingEmitRef.current !== null) {
+      return;
+    }
+
+    pendingEmitRef.current = window.setTimeout(() => {
+      pendingEmitRef.current = null;
+      emitNow(connected);
+    }, Math.max(1, minEmitMs - elapsed));
+  }, [emitNow, minEmitMs]);
+
+  const markTouchActivity = useCallback(() => {
+    lastTouchActivityMsRef.current = performance.now();
+    if (!controlsVisibleRef.current) {
+      revealControls();
+    }
+    if (!virtualConnectedRef.current) {
+      virtualConnectedRef.current = true;
+    }
+  }, [revealControls]);
+
   const updateLeftStick = useCallback((value: StickValue) => {
+    if (leftStickRef.current.x === value.x && leftStickRef.current.y === value.y) {
+      return;
+    }
     leftStickRef.current = value;
-    setLeftStick(value);
-    emit();
-  }, [emit]);
+    markTouchActivity();
+    scheduleEmit(true, value.x === 0 && value.y === 0);
+  }, [markTouchActivity, scheduleEmit]);
 
   const updateRightStick = useCallback((value: StickValue) => {
+    if (rightStickRef.current.x === value.x && rightStickRef.current.y === value.y) {
+      return;
+    }
     rightStickRef.current = value;
-    setRightStick(value);
-    emit();
-  }, [emit]);
+    markTouchActivity();
+    scheduleEmit(true, value.x === 0 && value.y === 0);
+  }, [markTouchActivity, scheduleEmit]);
 
-  const setButton = useCallback((mask: number, pressed: boolean) => {
-    buttonsRef.current = pressed
-      ? buttonsRef.current | mask
-      : buttonsRef.current & ~mask;
-    emit();
-  }, [emit]);
+  const setButtonsFromActivePointers = useCallback(() => {
+    let nextButtons = 0;
+    for (const mask of activeButtonPointersRef.current.values()) {
+      nextButtons |= mask;
+    }
+    if (nextButtons === buttonsRef.current) {
+      return;
+    }
+    buttonsRef.current = nextButtons;
+    markTouchActivity();
+    emitNow(true);
+  }, [emitNow, markTouchActivity]);
 
-  const setTrigger = useCallback((side: "left" | "right", pressed: boolean) => {
-    triggersRef.current = {
-      ...triggersRef.current,
-      [side]: pressed ? 1 : 0,
-    };
-    emit();
-  }, [emit]);
+  const setTriggersFromActivePointers = useCallback(() => {
+    let left = 0;
+    let right = 0;
+    for (const side of activeTriggerPointersRef.current.values()) {
+      if (side === "left") {
+        left = 1;
+      } else {
+        right = 1;
+      }
+    }
+    if (triggersRef.current.left === left && triggersRef.current.right === right) {
+      return;
+    }
+    triggersRef.current = { left, right };
+    markTouchActivity();
+    emitNow(true);
+  }, [emitNow, markTouchActivity]);
 
   const bindButton = (mask: number) => ({
     onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setButton(mask, true);
+      trySetPointerCapture(event.currentTarget, event.pointerId);
+      activeButtonPointersRef.current.set(event.pointerId, mask);
+      setButtonsFromActivePointers();
     },
     onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      setButton(mask, false);
+      tryReleasePointerCapture(event.currentTarget, event.pointerId);
+      activeButtonPointersRef.current.delete(event.pointerId);
+      setButtonsFromActivePointers();
     },
     onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      setButton(mask, false);
+      tryReleasePointerCapture(event.currentTarget, event.pointerId);
+      activeButtonPointersRef.current.delete(event.pointerId);
+      setButtonsFromActivePointers();
+    },
+    onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
     },
   });
 
   const bindTrigger = (side: "left" | "right") => ({
     onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setTrigger(side, true);
+      trySetPointerCapture(event.currentTarget, event.pointerId);
+      activeTriggerPointersRef.current.set(event.pointerId, side);
+      setTriggersFromActivePointers();
     },
     onPointerUp: (event: React.PointerEvent<HTMLButtonElement>) => {
       event.preventDefault();
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      setTrigger(side, false);
+      tryReleasePointerCapture(event.currentTarget, event.pointerId);
+      activeTriggerPointersRef.current.delete(event.pointerId);
+      setTriggersFromActivePointers();
     },
     onPointerCancel: (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      setTrigger(side, false);
+      tryReleasePointerCapture(event.currentTarget, event.pointerId);
+      activeTriggerPointersRef.current.delete(event.pointerId);
+      setTriggersFromActivePointers();
+    },
+    onContextMenu: (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
     },
   });
 
   useEffect(() => {
-    emit();
-    const keepalive = window.setInterval(() => emit(), 80);
+    const releasePointer = (event: PointerEvent) => {
+      let changed = false;
+      if (activeButtonPointersRef.current.delete(event.pointerId)) {
+        changed = true;
+      }
+      if (activeTriggerPointersRef.current.delete(event.pointerId)) {
+        changed = true;
+      }
+      if (!changed) {
+        return;
+      }
+      setButtonsFromActivePointers();
+      setTriggersFromActivePointers();
+    };
+
+    window.addEventListener("pointerup", releasePointer);
+    window.addEventListener("pointercancel", releasePointer);
     return () => {
+      window.removeEventListener("pointerup", releasePointer);
+      window.removeEventListener("pointercancel", releasePointer);
+    };
+  }, [setButtonsFromActivePointers, setTriggersFromActivePointers]);
+
+  useEffect(() => {
+    revealControls();
+  }, [revealControls, revealSignal]);
+
+  useEffect(() => {
+    const keepalive = window.setInterval(() => {
+      if (!virtualConnectedRef.current) {
+        return;
+      }
+      if (
+        isNeutral() &&
+        performance.now() - lastTouchActivityMsRef.current >= ANDROID_TOUCH_CONTROLLER_IDLE_DISCONNECT_MS
+      ) {
+        emitNow(false);
+        return;
+      }
+      scheduleEmit(true);
+    }, keepaliveMs);
+    return () => {
+      if (pendingEmitRef.current !== null) {
+        window.clearTimeout(pendingEmitRef.current);
+        pendingEmitRef.current = null;
+      }
+      if (hideControlsTimerRef.current !== null) {
+        window.clearTimeout(hideControlsTimerRef.current);
+        hideControlsTimerRef.current = null;
+      }
       window.clearInterval(keepalive);
       onVirtualGamepadState({ ...EMPTY_VIRTUAL_GAMEPAD_STATE, connected: false });
     };
-  }, [emit, onVirtualGamepadState]);
+  }, [emitNow, isNeutral, keepaliveMs, onVirtualGamepadState, scheduleEmit]);
 
   return (
     <div
+      ref={overlayRef}
       className="sv-touch"
       data-placement={settings.placement}
+      data-visible={controlsVisible ? "true" : "false"}
+      data-render-mode={lowPowerMode ? "lite" : "full"}
       aria-label="Touch controller"
       style={{
         "--sv-touch-scale": settings.size,
@@ -800,7 +1041,7 @@ function TouchControllerOverlay({
         <button type="button" className="sv-touch-btn sv-touch-btn--shoulder" {...bindButton(GAMEPAD_RB)}>RB</button>
       </div>
       <div className="sv-touch-left">
-        <TouchStick label="Left stick" value={leftStick} onChange={updateLeftStick} />
+        <TouchStick label="Left stick" onChange={updateLeftStick} />
         <div className="sv-touch-dpad" aria-label="D-pad">
           <button type="button" className="sv-touch-btn sv-touch-btn--dpad sv-touch-dpad-up" {...bindButton(GAMEPAD_DPAD_UP)}>U</button>
           <button type="button" className="sv-touch-btn sv-touch-btn--dpad sv-touch-dpad-left" {...bindButton(GAMEPAD_DPAD_LEFT)}>L</button>
@@ -813,7 +1054,7 @@ function TouchControllerOverlay({
         <button type="button" className="sv-touch-btn sv-touch-btn--menu" {...bindButton(GAMEPAD_START)}>Menu</button>
       </div>
       <div className="sv-touch-right">
-        <TouchStick label="Right stick" value={rightStick} onChange={updateRightStick} />
+        <TouchStick label="Right stick" onChange={updateRightStick} />
         <div className="sv-touch-face" aria-label="Face buttons">
           <button type="button" className="sv-touch-btn sv-touch-btn--face sv-touch-face-y" {...bindButton(GAMEPAD_Y)}>Y</button>
           <button type="button" className="sv-touch-btn sv-touch-btn--face sv-touch-face-x" {...bindButton(GAMEPAD_X)}>X</button>
@@ -888,7 +1129,7 @@ function AndroidMousePad({
       aria-label="Mouse touch area"
       onPointerDown={(event) => {
         event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        trySetPointerCapture(event.currentTarget, event.pointerId);
         hoverPointRef.current = { x: event.clientX, y: event.clientY };
         if (event.pointerType === "mouse") {
           setCursorFromClientPoint(event.clientX, event.clientY);
@@ -941,9 +1182,7 @@ function AndroidMousePad({
           event.preventDefault();
           const movedPx = Math.hypot(event.clientX - last.startX, event.clientY - last.startY);
           const elapsedMs = event.timeStamp - last.startMs;
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
+          tryReleasePointerCapture(event.currentTarget, event.pointerId);
           lastPointRef.current = null;
           hoverPointRef.current = { x: event.clientX, y: event.clientY };
           setCursorFromClientPoint(event.clientX, event.clientY);
@@ -954,9 +1193,7 @@ function AndroidMousePad({
       }}
       onPointerCancel={(event) => {
         if (lastPointRef.current?.id === event.pointerId) {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
+          tryReleasePointerCapture(event.currentTarget, event.pointerId);
           lastPointRef.current = null;
         }
       }}
@@ -1036,8 +1273,17 @@ function AndroidStreamMenu({
   touchSettings,
   onTouchSettingsChange,
   onEndSession,
+  onCaptureScreenshot,
   onSendText,
   onSendKeyPress,
+  physicalGamepads,
+  preferMouseInput,
+  revealSignal,
+  onTouchControlsReveal,
+  streamZoom,
+  onStreamZoomChange,
+  screenshotAvailable,
+  isSavingScreenshot,
 }: {
   diagnosticsStore: StreamDiagnosticsStore;
   sessionStartedAtMs: number | null;
@@ -1045,13 +1291,25 @@ function AndroidStreamMenu({
   touchSettings: AndroidTouchSettings;
   onTouchSettingsChange: (settings: AndroidTouchSettings) => void;
   onEndSession: () => void;
+  onCaptureScreenshot: () => void;
   onSendText?: (text: string) => number;
-  onSendKeyPress?: (key: "Backspace" | "Enter") => void;
+  onSendKeyPress?: (key: "Backspace" | "Enter" | "Escape") => void;
+  physicalGamepads: number;
+  preferMouseInput: boolean;
+  revealSignal?: number;
+  onTouchControlsReveal?: () => void;
+  streamZoom: number;
+  onStreamZoomChange: (value: number) => void;
+  screenshotAvailable: boolean;
+  isSavingScreenshot: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(true);
   const battery = useBatterySnapshot();
   const elapsedSeconds = useElapsedSeconds(sessionStartedAtMs, isStreaming);
   const textInputRef = useRef<HTMLInputElement | null>(null);
+  const hideTimerRef = useRef<number | null>(null);
+  const lastRevealSignalRef = useRef(revealSignal);
   const stats = useStreamDiagnosticsSelector(
     diagnosticsStore,
     (value) => ({
@@ -1074,8 +1332,56 @@ function AndroidStreamMenu({
   );
   const updateTouchSettings = useCallback((patch: Partial<AndroidTouchSettings>) => {
     onTouchSettingsChange({ ...touchSettings, ...patch });
-  }, [onTouchSettingsChange, touchSettings]);
+    if (patch.enabled === true) {
+      onTouchControlsReveal?.();
+    }
+  }, [onTouchControlsReveal, onTouchSettingsChange, touchSettings]);
   const batteryText = battery.level === null ? "Battery --" : `Battery ${battery.level}%${battery.charging ? " charging" : ""}`;
+  const scheduleHide = useCallback((delayMs = 3500) => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      setVisible(false);
+    }, delayMs);
+  }, []);
+  const reveal = useCallback((delayMs = 3500) => {
+    setVisible(true);
+    if (!open) {
+      scheduleHide(delayMs);
+    }
+  }, [open, scheduleHide]);
+  useEffect(() => {
+    if (open) {
+      setVisible(true);
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+      return;
+    }
+    scheduleHide();
+  }, [open, scheduleHide]);
+  useEffect(() => {
+    if (lastRevealSignalRef.current === revealSignal) {
+      return;
+    }
+    lastRevealSignalRef.current = revealSignal;
+    if (open) {
+      setOpen(false);
+      setVisible(true);
+      scheduleHide();
+      return;
+    }
+    reveal(5000);
+  }, [open, revealSignal, reveal, scheduleHide]);
+  useEffect(() => () => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+  }, []);
   const sendInputText = useCallback((input: HTMLInputElement) => {
     const text = input.value;
     input.value = "";
@@ -1088,8 +1394,12 @@ function AndroidStreamMenu({
     <div className="sv-android-menu">
       <button
         type="button"
-        className="sv-android-menu-toggle"
-        onClick={() => setOpen((value) => !value)}
+        className={`sv-android-menu-toggle${!visible && !open ? " is-hidden" : ""}`}
+        onClick={() => {
+          reveal();
+          onTouchControlsReveal?.();
+          setOpen((value) => !value);
+        }}
         aria-label="Open stream menu"
         aria-expanded={open}
         title="Stream menu"
@@ -1127,19 +1437,21 @@ function AndroidStreamMenu({
           <label className="sv-android-switch">
             <input
               type="checkbox"
-              checked={touchSettings.mousePad}
+              checked={touchSettings.mousePad || preferMouseInput}
+              disabled={preferMouseInput}
               onChange={(event) => updateTouchSettings({ mousePad: event.target.checked })}
             />
-            <span><MousePointer2 size={14} /> Finger mouse</span>
+            <span><MousePointer2 size={14} /> {preferMouseInput ? "Finger mouse required" : "Finger mouse"}</span>
           </label>
 
           <label className="sv-android-switch">
             <input
               type="checkbox"
-              checked={touchSettings.mouseCapture}
+              checked={touchSettings.mouseCapture && physicalGamepads === 0}
+              disabled={physicalGamepads > 0}
               onChange={(event) => updateTouchSettings({ mouseCapture: event.target.checked })}
             />
-            <span><MousePointer2 size={14} /> External mouse capture</span>
+            <span><MousePointer2 size={14} /> {physicalGamepads > 0 ? "Mouse capture paused" : "External mouse capture"}</span>
           </label>
 
           <div className="sv-android-text-input">
@@ -1198,6 +1510,16 @@ function AndroidStreamMenu({
               >
                 <Delete size={15} />
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onSendKeyPress?.("Escape");
+                  textInputRef.current?.focus();
+                }}
+                aria-label="Send Escape"
+              >
+                Esc
+              </button>
             </div>
           </div>
 
@@ -1225,8 +1547,20 @@ function AndroidStreamMenu({
             />
           </label>
 
+          <label className="sv-android-slider">
+            <span>Zoom {streamZoom.toFixed(2)}x</span>
+            <input
+              type="range"
+              min="100"
+              max="180"
+              step="5"
+              value={Math.round(streamZoom * 100)}
+              onChange={(event) => onStreamZoomChange(Number(event.target.value) / 100)}
+            />
+          </label>
+
           <div className="sv-android-placement" aria-label="Touch control placement">
-            {(["default", "compact", "lower", "split"] as TouchPlacement[]).map((placement) => (
+            {(["default", "compact", "lower", "split"] as AndroidTouchPlacement[]).map((placement) => (
               <button
                 type="button"
                 key={placement}
@@ -1237,6 +1571,16 @@ function AndroidStreamMenu({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            className="sv-android-action"
+            onClick={onCaptureScreenshot}
+            disabled={!screenshotAvailable || isSavingScreenshot}
+          >
+            <Camera size={15} />
+            <span>{isSavingScreenshot ? "Capturing..." : "Screenshot"}</span>
+          </button>
 
           <button
             type="button"
@@ -1404,14 +1748,20 @@ export function StreamView({
   onVirtualGamepadState,
   onTouchMouseMove,
   onTouchMouseTap,
+  onTouchMouseButton,
+  onTouchMouseWheel,
   onSendText,
   onSendKeyPress,
+  androidTouchControls,
+  onAndroidTouchControlsChange,
   microphoneMode,
   onMicrophoneModeChange,
   onScreenshotShortcutChange,
   onRecordingShortcutChange,
   subscriptionInfo,
   micTrack,
+  lowPowerTouchControls = false,
+  preferAndroidMouseInput = false,
   hideStreamButtons = false,
   className,
 }: StreamViewProps): JSX.Element {
@@ -1421,6 +1771,7 @@ export function StreamView({
   const [showSideBar, setShowSideBar] = useState(false);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [hasVideoFrame, setHasVideoFrame] = useState(false);
+  const [streamZoom, setStreamZoom] = useState(1);
   const [screenshots, setScreenshots] = useState<ScreenshotEntry[]>([]);
   const [isSavingScreenshot, setIsSavingScreenshot] = useState(false);
   const [galleryError, setGalleryError] = useState<string | null>(null);
@@ -1444,13 +1795,164 @@ export function StreamView({
   const [usedMimeType, setUsedMimeType] = useState<string | null>(null);
   const [recordingShortcutInput, setRecordingShortcutInput] = useState(shortcuts.recording);
   const [recordingShortcutError, setRecordingShortcutError] = useState<string | null>(null);
-  const [androidTouchSettings, setAndroidTouchSettings] = useState<AndroidTouchSettings>(() => readAndroidTouchSettings());
+  const androidTouchSettings = useMemo(
+    () => normalizeAndroidTouchSettings(androidTouchControls),
+    [androidTouchControls],
+  );
+  const androidPhysicalGamepads = useStreamDiagnosticsSelector(
+    diagnosticsStore,
+    (stats) => stats.physicalGamepads,
+  );
+  const [androidNativeTouchAvailable, setAndroidNativeTouchAvailable] = useState(true);
+  const hasVirtualGamepadHandler = Boolean(onVirtualGamepadState);
+  const androidTouchSurfaceAvailable = !isAndroidTvLikeSurface() && androidPhysicalGamepads === 0;
+  const androidMousePadEnabled = androidTouchSettings.mousePad || preferAndroidMouseInput;
+  const shouldAttemptAndroidNativeTouchControls =
+    platformCapabilities.isAndroid &&
+    lowPowerTouchControls &&
+    androidNativeTouchAvailable &&
+    androidTouchSurfaceAvailable &&
+    androidTouchSettings.enabled &&
+    hasVirtualGamepadHandler;
+  const shouldRenderReactAndroidTouchControls =
+    platformCapabilities.isAndroid &&
+    hasVirtualGamepadHandler &&
+    androidTouchSurfaceAvailable &&
+    androidTouchSettings.enabled &&
+    (!lowPowerTouchControls || !androidNativeTouchAvailable);
+  const virtualGamepadStateRef = useRef(onVirtualGamepadState);
+  virtualGamepadStateRef.current = onVirtualGamepadState;
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid) {
+      return;
+    }
+
+    console.log("[AndroidTouchOverlay] render gate", {
+      enabled: androidTouchSettings.enabled,
+      lowPowerTouchControls,
+      preferAndroidMouseInput,
+      physicalGamepads: androidPhysicalGamepads,
+      touchSurfaceAvailable: androidTouchSurfaceAvailable,
+      nativeTouchAvailable: androidNativeTouchAvailable,
+      hasVirtualGamepadHandler,
+      hasNativeTouchApi: Boolean(openNow.setAndroidNativeTouchControls),
+      hasNativeTouchListener: Boolean(openNow.onAndroidNativeTouchGamepad),
+      reactOverlayWillRender: shouldRenderReactAndroidTouchControls,
+      nativeOverlayWillAttempt: shouldAttemptAndroidNativeTouchControls,
+      mousePadWillRender: androidMousePadEnabled,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+  }, [
+    androidNativeTouchAvailable,
+    androidPhysicalGamepads,
+    androidTouchSettings.enabled,
+    androidTouchSurfaceAvailable,
+    androidMousePadEnabled,
+    hasVirtualGamepadHandler,
+    lowPowerTouchControls,
+    preferAndroidMouseInput,
+    shouldAttemptAndroidNativeTouchControls,
+    shouldRenderReactAndroidTouchControls,
+  ]);
+  useEffect(() => {
+    if (
+      !platformCapabilities.isAndroid ||
+      !lowPowerTouchControls ||
+      !androidTouchSurfaceAvailable ||
+      !androidTouchSettings.enabled ||
+      !virtualGamepadStateRef.current
+    ) {
+      return;
+    }
+
+    if (!openNow.setAndroidNativeTouchControls || !openNow.onAndroidNativeTouchGamepad) {
+      console.warn("[AndroidTouchOverlay] Native touch controls unavailable; falling back to React overlay");
+      setAndroidNativeTouchAvailable(false);
+      return;
+    }
+
+    if (!androidNativeTouchAvailable) {
+      return;
+    }
+
+    let lastNativeGamepadState: VirtualGamepadState | null = null;
+    let disposed = false;
+    console.log("[AndroidTouchOverlay] Native overlay initializing", {
+      placement: androidTouchSettings.placement,
+      size: androidTouchSettings.size,
+      opacity: androidTouchSettings.opacity,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      devicePixelRatio: window.devicePixelRatio,
+    });
+    const removeNativeTouchListener = openNow.onAndroidNativeTouchGamepad((event) => {
+      lastNativeGamepadState = {
+        connected: event.connected,
+        buttons: event.buttons,
+        leftTrigger: event.leftTrigger,
+        rightTrigger: event.rightTrigger,
+        leftStickX: event.leftStickX,
+        leftStickY: event.leftStickY,
+        rightStickX: event.rightStickX,
+        rightStickY: event.rightStickY,
+      };
+      virtualGamepadStateRef.current?.(lastNativeGamepadState);
+    });
+    const keepalive = window.setInterval(() => {
+      if (lastNativeGamepadState?.connected) {
+        virtualGamepadStateRef.current?.(lastNativeGamepadState);
+      }
+    }, 500);
+    void openNow.setAndroidNativeTouchControls({
+      enabled: true,
+      size: androidTouchSettings.size,
+      opacity: androidTouchSettings.opacity,
+      placement: androidTouchSettings.placement,
+    }).then((attached) => {
+      if (disposed) {
+        return;
+      }
+      if (attached) {
+        console.log("[AndroidTouchOverlay] Native overlay attached");
+        return;
+      }
+      console.warn("[AndroidTouchOverlay] Native overlay did not attach; falling back to React overlay");
+      setAndroidNativeTouchAvailable(false);
+      virtualGamepadStateRef.current?.({ ...EMPTY_VIRTUAL_GAMEPAD_STATE, connected: false });
+    });
+
+    return () => {
+      disposed = true;
+      window.clearInterval(keepalive);
+      removeNativeTouchListener();
+      void openNow.setAndroidNativeTouchControls?.({ enabled: false });
+      virtualGamepadStateRef.current?.({ ...EMPTY_VIRTUAL_GAMEPAD_STATE, connected: false });
+    };
+  }, [
+    androidTouchSettings.enabled,
+    androidTouchSettings.opacity,
+    androidTouchSettings.placement,
+    androidTouchSettings.size,
+    androidNativeTouchAvailable,
+    androidTouchSurfaceAvailable,
+    lowPowerTouchControls,
+  ]);
+  const androidNativeMouseCapture = androidTouchSettings.mouseCapture && androidPhysicalGamepads === 0;
+  const [androidMenuRevealSignal, setAndroidMenuRevealSignal] = useState(0);
+  const [androidTouchRevealSignal, setAndroidTouchRevealSignal] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIdRef = useRef<string | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const recordingTimerRef = useRef<number | undefined>(undefined);
   const thumbnailDataUrlRef = useRef<string | null>(null);
   const recCarouselRef = useRef<HTMLDivElement | null>(null);
+  const touchMouseMoveRef = useRef(onTouchMouseMove);
+  const touchMouseButtonRef = useRef(onTouchMouseButton);
+  const touchMouseWheelRef = useRef(onTouchMouseWheel);
+  touchMouseMoveRef.current = onTouchMouseMove;
+  touchMouseButtonRef.current = onTouchMouseButton;
+  touchMouseWheelRef.current = onTouchMouseWheel;
+  const hasNativeMouseMoveHandler = Boolean(onTouchMouseMove);
   const recordingApiAvailable =
     typeof openNow?.beginRecording === "function" &&
     typeof openNow?.sendRecordingChunk === "function" &&
@@ -1460,45 +1962,74 @@ export function StreamView({
     typeof openNow?.deleteRecording === "function";
 
   const handleAndroidTouchSettingsChange = useCallback((next: AndroidTouchSettings) => {
-    const normalized: AndroidTouchSettings = {
-      enabled: next.enabled,
-      size: clampNumber(next.size, 0.72, 1.35),
-      opacity: clampNumber(next.opacity, 0.25, 1),
-      placement: next.placement,
-      mousePad: next.mousePad,
-      mouseCapture: next.mouseCapture,
-    };
-    setAndroidTouchSettings(normalized);
-    writeAndroidTouchSettings(normalized);
-  }, []);
+    onAndroidTouchControlsChange(normalizeAndroidTouchSettings(next));
+  }, [onAndroidTouchControlsChange]);
 
   useEffect(() => {
     if (
       !platformCapabilities.isAndroid ||
       !isStreaming ||
       isConnecting ||
-      !androidTouchSettings.mouseCapture ||
-      !onTouchMouseMove
+      !androidNativeMouseCapture ||
+      !hasNativeMouseMoveHandler
     ) {
       return;
     }
 
-    const unsubscribe = openNow.onNativeMouseMove((event) => {
+    const unsubscribeMove = openNow.onNativeMouseMove((event) => {
       const dx = Number(event.dx);
       const dy = Number(event.dy);
       if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) {
         return;
       }
-      onTouchMouseMove({ dx, dy });
+      touchMouseMoveRef.current?.({ dx, dy, timestampMs: event.timestampMs });
+    });
+    const unsubscribeButton = openNow.onNativeMouseButton((event) => {
+      const button = Number(event.button);
+      if (!Number.isFinite(button)) {
+        return;
+      }
+      touchMouseButtonRef.current?.({
+        button,
+        pressed: Boolean(event.pressed),
+        timestampMs: event.timestampMs,
+      });
+    });
+    const unsubscribeWheel = openNow.onNativeMouseWheel((event) => {
+      const delta = Number(event.delta);
+      if (!Number.isFinite(delta) || delta === 0) {
+        return;
+      }
+      touchMouseWheelRef.current?.({ delta, timestampMs: event.timestampMs });
     });
 
     void openNow.setNativePointerCapture(true);
 
     return () => {
-      unsubscribe();
+      unsubscribeMove();
+      unsubscribeButton();
+      unsubscribeWheel();
       void openNow.setNativePointerCapture(false);
     };
-  }, [androidTouchSettings.mouseCapture, isConnecting, isStreaming, onTouchMouseMove]);
+  }, [androidNativeMouseCapture, hasNativeMouseMoveHandler, isConnecting, isStreaming]);
+
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid) {
+      return;
+    }
+
+    const revealAndroidUi = (event: Event) => {
+      if (!isStreaming || isConnecting) {
+        return;
+      }
+      event.preventDefault();
+      setAndroidMenuRevealSignal((value) => value + 1);
+      setAndroidTouchRevealSignal((value) => value + 1);
+    };
+
+    window.addEventListener("opennow:android-back", revealAndroidUi);
+    return () => window.removeEventListener("opennow:android-back", revealAndroidUi);
+  }, [isConnecting, isStreaming]);
 
   const microphoneModes = useMemo(
     () => [
@@ -1834,7 +2365,12 @@ export function StreamView({
         throw new Error("Could not acquire 2D context");
       }
 
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const zoom = clampNumber(streamZoom, 1, 1.8);
+      const sourceWidth = Math.max(1, video.videoWidth / zoom);
+      const sourceHeight = Math.max(1, video.videoHeight / zoom);
+      const sourceX = (video.videoWidth - sourceWidth) / 2;
+      const sourceY = (video.videoHeight - sourceHeight) / 2;
+      context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/png");
       const saved = await openNow.saveScreenshot({ dataUrl, gameTitle });
       setScreenshots((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)].slice(0, 60));
@@ -1844,7 +2380,7 @@ export function StreamView({
     } finally {
       setIsSavingScreenshot(false);
     }
-  }, [gameTitle, isSavingScreenshot, screenshotApiAvailable]);
+  }, [gameTitle, isSavingScreenshot, screenshotApiAvailable, streamZoom]);
 
   const scrollGallery = useCallback((direction: "left" | "right") => {
     const strip = galleryStripRef.current;
@@ -2268,6 +2804,7 @@ export function StreamView({
         muted
         tabIndex={0}
         className={`sv-video${hasVideoFrame ? " sv-video--ready" : ""}`}
+        style={streamZoom > 1 ? { transform: `scale(${streamZoom})` } : undefined}
         onLoadedData={markVideoFrameReady}
         onCanPlay={markVideoFrameReady}
         onResize={markVideoFrameReady}
@@ -2731,14 +3268,16 @@ export function StreamView({
 
       {platformCapabilities.isAndroid && !isConnecting && (
         <>
-          {onVirtualGamepadState && androidTouchSettings.enabled && (
+          {shouldRenderReactAndroidTouchControls && onVirtualGamepadState && (
             <TouchControllerOverlay
               onVirtualGamepadState={onVirtualGamepadState}
               settings={androidTouchSettings}
+              revealSignal={androidTouchRevealSignal}
+              lowPowerMode={lowPowerTouchControls}
             />
           )}
           <AndroidMousePad
-            enabled={androidTouchSettings.mousePad}
+            enabled={androidMousePadEnabled}
             onTouchMouseMove={onTouchMouseMove}
             onTouchMouseTap={onTouchMouseTap}
           />
@@ -2749,8 +3288,19 @@ export function StreamView({
             touchSettings={androidTouchSettings}
             onTouchSettingsChange={handleAndroidTouchSettingsChange}
             onEndSession={onEndSession}
+            onCaptureScreenshot={() => {
+              void captureScreenshot();
+            }}
             onSendText={onSendText}
             onSendKeyPress={onSendKeyPress}
+            physicalGamepads={androidPhysicalGamepads}
+            preferMouseInput={preferAndroidMouseInput}
+            revealSignal={androidMenuRevealSignal}
+            onTouchControlsReveal={() => setAndroidTouchRevealSignal((value) => value + 1)}
+            streamZoom={streamZoom}
+            onStreamZoomChange={(value) => setStreamZoom(clampNumber(value, 1, 1.8))}
+            screenshotAvailable={screenshotApiAvailable}
+            isSavingScreenshot={isSavingScreenshot}
           />
         </>
       )}
@@ -2901,7 +3451,7 @@ export function StreamView({
       )}
 
       {/* Fullscreen toggle */}
-      {!hideStreamButtons && (
+      {!hideStreamButtons && !platformCapabilities.isAndroid && (
         <button
           className="sv-fs"
           onClick={handleFullscreenToggle}
@@ -2913,7 +3463,7 @@ export function StreamView({
       )}
 
       {/* End session button */}
-      {!hideStreamButtons && (
+      {!hideStreamButtons && !platformCapabilities.isAndroid && (
         <button
           className="sv-end"
           onClick={onEndSession}

@@ -498,7 +498,13 @@ export function ControllerLibraryPage({
   }, [currentStreamingGame, selectedGame]);
 
   useEffect(() => {
-    if (!showGameHub || !selectedGame?.title || typeof openNow?.listMediaByGame !== "function") {
+    const skipAndroidAllMediaPreview = platformCapabilities.isAndroid && topCategory === "all";
+    if (
+      skipAndroidAllMediaPreview ||
+      !showGameHub ||
+      !selectedGame?.title ||
+      typeof openNow?.listMediaByGame !== "function"
+    ) {
       setGameHubMedia([]);
       setGameHubMediaLoading(false);
       return;
@@ -555,7 +561,7 @@ export function ControllerLibraryPage({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [selectedGame?.id, selectedGame?.title, showGameHub]);
+  }, [selectedGame?.id, selectedGame?.title, showGameHub, topCategory]);
 
 
 
@@ -586,7 +592,7 @@ export function ControllerLibraryPage({
     const applyDirection = (direction: Direction): void => {
       // When editing the bandwidth slider, use left/right to adjust value
       if (topCategory === "settings" && settingsSubcategory !== "root" && editingBandwidth) {
-        const step = 5; // Mbps per left/right press
+        const step = 1; // Mbps per left/right press
         const current = settings.maxBitrateMbps ?? 75;
         if (direction === "left") {
           const next = Math.max(5, current - step);

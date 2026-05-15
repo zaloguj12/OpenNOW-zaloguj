@@ -7,6 +7,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 
 import type {
   ActiveSessionInfo,
+  AndroidLaunchIntent,
   AuthLoginRequest,
   AuthSession,
   AuthSessionRequest,
@@ -24,7 +25,9 @@ import type {
   MainToRendererSignalingEvent,
   MediaListingResult,
   MicrophonePermissionResult,
+  NativeMouseButtonEvent,
   NativeMouseMoveEvent,
+  NativeMouseWheelEvent,
   OpenNowApi,
   PingResult,
   RecordingAbortRequest,
@@ -59,6 +62,9 @@ import type {
   ThankYouDataResult,
   PrintedWasteQueueData,
   PrintedWasteServerMapping,
+  AndroidPerformanceInfo,
+  AndroidNativeTouchControlsOptions,
+  AndroidNativeTouchGamepadEvent,
 } from "@shared/gfn";
 import { DEFAULT_KEYBOARD_LAYOUT, colorQualityBitDepth, colorQualityChromaFormat, resolveGfnKeyboardLayout } from "@shared/gfn";
 import {
@@ -84,7 +90,8 @@ import {
   toExpiresAt,
   userFromJwt,
 } from "@shared/gfnRuntime";
-import { DEFAULT_SETTINGS } from "@shared/settings";
+import { exportLogs as exportCapturedLogs } from "@shared/logger";
+import { DEFAULT_SETTINGS, normalizeSettings } from "@shared/settings";
 import type { OpenNowPlatform } from "../types";
 import { BrowserSignalingClient } from "./browserSignaling";
 import { isNativeHttpError, nativeRequest } from "./http";
@@ -135,7 +142,13 @@ const LocalhostAuth = registerPlugin<LocalhostAuthPlugin>("LocalhostAuth");
 interface OpenNowAndroidPlugin {
   setImmersiveFullscreen(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
   setPointerCapture(options: { enabled: boolean }): Promise<{ supported: boolean; enabled: boolean }>;
-  addListener(eventName: "nativeMouseMove", listener: (event: NativeMouseMoveEvent) => void): Promise<PluginListenerHandle>;
+  getPerformanceInfo(): Promise<AndroidPerformanceInfo>;
+  setNativeTouchControls(options: AndroidNativeTouchControlsOptions): Promise<{ enabled: boolean }>;
+  consumeLaunchIntent(): Promise<{ intent?: AndroidLaunchIntent | null }>;
+  addListener(
+    eventName: "nativeMouseMove" | "nativeMouseButton" | "nativeMouseWheel" | "nativeTouchGamepad" | "launchIntent",
+    listener: (event: NativeMouseMoveEvent | NativeMouseButtonEvent | NativeMouseWheelEvent | AndroidNativeTouchGamepadEvent | AndroidLaunchIntent) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 const OpenNowAndroid = registerPlugin<OpenNowAndroidPlugin>("OpenNowAndroid");
@@ -145,7 +158,22 @@ interface TokenResponse { access_token: string; refresh_token?: string; id_token
 interface ClientTokenResponse { client_token: string; expires_in?: number; }
 interface ServiceUrlsResponse { gfnServiceInfo?: { gfnServiceEndpoints?: Array<{ idpId: string; loginProviderCode: string; loginProviderDisplayName: string; streamingServiceUrl: string; loginProviderPriority?: number; }>; }; }
 interface ServerInfoResponse { requestStatus?: { serverId?: string }; metaData?: Array<{ key: string; value: string }>; }
-interface GraphQlResponse { data?: { panels?: Array<{ sections?: Array<{ items?: Array<{ __typename: string; app?: AppData }> }> }>; apps?: { items: AppData[] } }; errors?: Array<{ message: string }>; }
+interface GraphQlResponse {
+  data?: {
+    panels?: Array<{ sections?: Array<{ items?: Array<{ __typename: string; app?: AppData }> }> }>;
+    apps?: {
+      items: AppData[];
+      numberReturned?: number;
+      numberSupported?: number;
+      pageInfo?: {
+        totalCount?: number;
+        hasNextPage?: boolean;
+        endCursor?: string;
+      };
+    };
+  };
+  errors?: Array<{ message: string }>;
+}
 interface AppData { id: string; title: string; description?: string; longDescription?: string; features?: unknown[]; gameFeatures?: unknown[]; appFeatures?: unknown[]; genres?: unknown[]; tags?: unknown[]; images?: { KEY_ART?: string; GAME_BOX_ART?: string; TV_BANNER?: string; HERO_IMAGE?: string }; publisherName?: string; contentRatings?: unknown[]; variants?: Array<{ id: string; appStore: string; supportedControls?: string[]; gfn?: { status?: string; library?: { selected?: boolean; status?: string; lastPlayedDate?: string } } }>; gfn?: { playType?: string; playabilityState?: string; minimumMembershipTierLabel?: string; catalogSkuStrings?: { SKU_BASED_TAG?: string[] } }; }
 interface SubscriptionResponse { firstEntitlementStartDateTime?: string; type?: string; membershipTier?: string; allottedTimeInMinutes?: number; purchasedTimeInMinutes?: number; rolledOverTimeInMinutes?: number; remainingTimeInMinutes?: number; totalTimeInMinutes?: number; notifications?: { notifyUserWhenTimeRemainingInMinutes?: number; notifyUserOnSessionWhenRemainingTimeInMinutes?: number }; currentSpanStartDateTime?: string; currentSpanEndDateTime?: string; currentSubscriptionState?: { state?: string; isGamePlayAllowed?: boolean }; subType?: string; addons?: Array<{ type?: string; subType?: string; status?: string; attributes?: Array<{ key?: string; textValue?: string }> }>; features?: { resolutions?: Array<{ heightInPixels: number; widthInPixels: number; framesPerSecond: number }> }; }
 interface RawPublicGame { id?: string | number; title?: string; steamUrl?: string; status?: string; }
@@ -184,6 +212,58 @@ async function tcpPingRegion(region: StreamRegion): Promise<PingResult> {
   } catch (error) {
     return { url: region.url, pingMs: null, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+async function exportAndroidLogs(format: "text" | "json" = "text"): Promise<string> {
+  const info = await Device.getInfo().catch(() => null);
+  const diagnostics = {
+    generatedAt: new Date().toISOString(),
+    platform: "android",
+    userAgent: navigator.userAgent,
+    url: window.location.href,
+    fullscreen: document.fullscreenElement !== null || document.body.dataset.androidFullscreen === "true",
+    viewport: {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    },
+    device: info
+      ? {
+          manufacturer: info.manufacturer,
+          model: info.model,
+          platform: info.platform,
+          osVersion: info.osVersion,
+          androidSDKVersion: info.androidSDKVersion,
+          webViewVersion: info.webViewVersion,
+          isVirtual: info.isVirtual,
+        }
+      : null,
+  };
+
+  const logs = exportCapturedLogs(format);
+  if (format === "json") {
+    let parsedLogs: unknown = logs;
+    try {
+      parsedLogs = JSON.parse(logs);
+    } catch {
+      parsedLogs = logs;
+    }
+    return JSON.stringify({ diagnostics, logs: parsedLogs }, null, 2);
+  }
+
+  return [
+    "OpenNOW Android Debug Bundle",
+    `Generated: ${diagnostics.generatedAt}`,
+    `URL: ${diagnostics.url}`,
+    `User Agent: ${diagnostics.userAgent}`,
+    `Viewport: ${diagnostics.viewport.width}x${diagnostics.viewport.height} @ ${diagnostics.viewport.devicePixelRatio}`,
+    `Fullscreen: ${diagnostics.fullscreen}`,
+    diagnostics.device
+      ? `Device: ${diagnostics.device.manufacturer ?? "unknown"} ${diagnostics.device.model ?? "unknown"}, Android ${diagnostics.device.osVersion ?? "unknown"} (SDK ${diagnostics.device.androidSDKVersion ?? "unknown"}), WebView ${diagnostics.device.webViewVersion ?? "unknown"}`
+      : "Device: unavailable",
+    "=".repeat(60),
+    logs,
+  ].join("\n");
 }
 function authRedirectUri(port: number): string { return `http://localhost:${port}`; }
 async function createPkce(): Promise<{ verifier: string; challenge: string }> { const bytes = new Uint8Array(64); crypto.getRandomValues(bytes); let binary = ""; for (const value of bytes) binary += String.fromCharCode(value); const verifier = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "").slice(0, 86); const challengeBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)); let challengeBinary = ""; for (const value of new Uint8Array(challengeBuffer)) challengeBinary += String.fromCharCode(value); const challenge = btoa(challengeBinary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); return { verifier, challenge }; }
@@ -383,8 +463,8 @@ class AndroidAuthService {
 const authStore = new AndroidAuthService();
 const initPromise = authStore.initialize();
 async function ensureInitialized(): Promise<void> { await initPromise; }
-async function getStoredSettings(): Promise<Settings> { return { ...DEFAULT_SETTINGS, ...(await readPreferenceJson<Partial<Settings>>(SETTINGS_KEY, {})) }; }
-async function saveSettings(settings: Settings): Promise<void> { await writePreferenceJson(SETTINGS_KEY, settings); }
+async function getStoredSettings(): Promise<Settings> { return normalizeSettings(await readPreferenceJson<Partial<Settings>>(SETTINGS_KEY, {})); }
+async function saveSettings(settings: Settings): Promise<void> { await writePreferenceJson(SETTINGS_KEY, normalizeSettings(settings)); }
 
 async function getVpcInfo(token: string | undefined, streamingBaseUrl: string): Promise<{ regions: StreamRegion[]; vpcId: string | null }> { const headers: Record<string, string> = { Accept: "application/json", "nv-client-id": LCARS_CLIENT_ID, "nv-client-type": "BROWSER", "nv-client-version": GFN_CLIENT_VERSION, "nv-client-streamer": "WEBRTC", "nv-device-os": "ANDROID", "nv-device-type": "PHONE", "User-Agent": GFN_USER_AGENT }; if (token) headers.Authorization = `GFNJWT ${token}`; const payload = await httpRequest<ServerInfoResponse>(`${normalizeBaseUrl(streamingBaseUrl)}v2/serverInfo`, { headers }); const regions = (payload.metaData ?? []).filter((entry) => entry.value.startsWith("https://") && entry.key !== "gfn-regions" && !entry.key.startsWith("gfn-")).map<StreamRegion>((entry) => ({ name: entry.key, url: normalizeBaseUrl(entry.value) })).sort((a, b) => a.name.localeCompare(b.name)); return { regions, vpcId: payload.requestStatus?.serverId ?? null }; }
 async function getVpcId(token: string, providerStreamingBaseUrl?: string): Promise<string> { try { return (await getVpcInfo(token, providerStreamingBaseUrl ?? authStore.getSession()?.provider.streamingServiceUrl ?? authStore.getSelectedProvider().streamingServiceUrl ?? DEFAULT_PROVIDER_STREAMING_URL)).vpcId ?? "GFN-PC"; } catch { return "GFN-PC"; } }
@@ -397,6 +477,84 @@ async function fetchCatalog(kind: "MAIN" | "LIBRARY", token: string, providerStr
   const vpcId = await getVpcId(token, providerStreamingBaseUrl);
   const payload = await fetchPanels(token, [kind], vpcId);
   return flattenPanels(payload);
+}
+async function searchCatalog(
+  token: string,
+  providerStreamingBaseUrl: string | undefined,
+  searchQuery: string,
+): Promise<{ games: GameInfo[]; numberReturned: number; numberSupported: number; totalCount: number }> {
+  const vpcId = await getVpcId(token, providerStreamingBaseUrl);
+  const query = `query GetSearchFilterResults(
+    $vpcId: String!,
+    $locale: String!,
+    $sortString: String!,
+    $fetchCount: Int!,
+    $cursor: String!,
+    $searchString: String!,
+    $filters: AppFilterFields!
+  ) {
+    apps(
+      vpcId: $vpcId,
+      language: $locale,
+      orderBy: $sortString,
+      first: $fetchCount,
+      after: $cursor,
+      searchQuery: $searchString,
+      filters: $filters
+    ) {
+      numberReturned
+      numberSupported
+      pageInfo { totalCount hasNextPage endCursor }
+      items {
+        id
+        title
+        images { KEY_ART GAME_BOX_ART TV_BANNER HERO_IMAGE }
+        variants {
+          id
+          appStore
+          supportedControls
+          gfn {
+            status
+            library { status selected lastPlayedDate }
+          }
+        }
+        gfn {
+          playType
+          playabilityState
+          minimumMembershipTierLabel
+          catalogSkuStrings { SKU_BASED_TAG }
+        }
+      }
+    }
+  }`;
+
+  const payload = await httpRequest<GraphQlResponse>(GFN_GRAPHQL_URL, {
+    method: "POST",
+    headers: buildCatalogHeaders(token),
+    data: {
+      query,
+      variables: {
+        vpcId,
+        locale: DEFAULT_LOCALE,
+        sortString: "itemMetadata.relevance:DESC,sortName:ASC",
+        fetchCount: 100,
+        cursor: "",
+        searchString: searchQuery,
+        filters: {},
+      },
+    },
+  });
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((error) => error.message).join(", "));
+  }
+  const apps = payload.data?.apps;
+  const games = dedupeGames((apps?.items ?? []).map(appToGame));
+  return {
+    games,
+    numberReturned: apps?.numberReturned ?? games.length,
+    numberSupported: Math.max(apps?.numberSupported ?? 0, games.length),
+    totalCount: Math.max(apps?.pageInfo?.totalCount ?? 0, games.length),
+  };
 }
 const androidCatalogCache = new Map<string, { games: GameInfo[]; loadedAtMs: number }>();
 const androidCatalogInflight = new Map<string, Promise<GameInfo[]>>();
@@ -524,18 +682,28 @@ async function browseCatalogRequest(input: CatalogBrowseRequest): Promise<Catalo
     ? (input.sortId as string)
     : "relevance";
   const normalizedQuery = input.searchQuery?.trim().toLowerCase() ?? "";
-  const searchedGames = normalizedQuery
-    ? allGames.filter((game) => catalogSearchText(game).includes(normalizedQuery))
-    : allGames;
+  let searchResult: Awaited<ReturnType<typeof searchCatalog>> | null = null;
+  if (normalizedQuery) {
+    try {
+      searchResult = await searchCatalog(token, input.providerStreamingBaseUrl, normalizedQuery);
+    } catch (error) {
+      console.warn("[Android catalog] Full catalog search failed; falling back to cached Main panel search.", error);
+    }
+  }
+  const searchedGames = searchResult
+    ? searchResult.games
+    : normalizedQuery
+      ? allGames.filter((game) => catalogSearchText(game).includes(normalizedQuery))
+      : allGames;
   const filteredGames = selectedFilterIds.length > 0
     ? searchedGames.filter((game) => selectedFilterIds.every((filterId) => gameMatchesCatalogFilter(game, filterId)))
     : searchedGames;
   const sortedGames = sortAndroidCatalogGames(filteredGames, selectedSortId);
   return {
     games: sortedGames,
-    numberReturned: sortedGames.length,
-    numberSupported: sortedGames.length,
-    totalCount: filteredGames.length,
+    numberReturned: searchResult?.numberReturned ?? sortedGames.length,
+    numberSupported: searchResult?.numberSupported ?? sortedGames.length,
+    totalCount: searchResult?.totalCount ?? filteredGames.length,
     hasNextPage: false,
     searchQuery: input.searchQuery ?? "",
     selectedSortId,
@@ -901,40 +1069,40 @@ async function pollSessionRequest(input: SessionPollRequest): Promise<SessionInf
   try {
     response = await readSession(base);
   } catch (error) {
-    const shouldRetryViaZone = isNativeHttpError(error) && isTransientSessionRouteStatus(error.status);
+    const errorPayload = cloudMatchPayloadFromError(error);
+    if (errorPayload && isPollableSessionPayload(errorPayload)) {
+      response = errorPayload;
+    } else {
+      const shouldRetryViaZone = isNativeHttpError(error) && isTransientSessionRouteStatus(error.status);
 
-    if (!shouldRetryViaZone) {
-      throw error;
-    }
-
-    let recovered: CloudMatchResponse | null = null;
-    for (const fallbackBase of fallbackPollBases(input.zone, input.streamingBaseUrl, base)) {
-      try {
-        console.warn(`[Android] Session poll via ${base} failed with HTTP ${error.status}; retrying via ${fallbackBase}.`);
-        recovered = await readSession(fallbackBase);
-        base = fallbackBase;
-        break;
-      } catch (fallbackError) {
-        const fallbackPayload = cloudMatchPayloadFromError(fallbackError);
-        if (fallbackPayload && isPollableSessionPayload(fallbackPayload)) {
-          recovered = fallbackPayload;
-          base = fallbackBase;
-          break;
-        }
-        if (!isNativeHttpError(fallbackError) || !isTransientSessionRouteStatus(fallbackError.status)) {
-          throw fallbackError;
-        }
-      }
-    }
-    if (!recovered) {
-      const errorPayload = cloudMatchPayloadFromError(error);
-      if (errorPayload && isPollableSessionPayload(errorPayload)) {
-        response = errorPayload;
-      } else {
+      if (!shouldRetryViaZone) {
         throw error;
       }
-    } else {
-      response = recovered;
+
+      let recovered: CloudMatchResponse | null = null;
+      for (const fallbackBase of fallbackPollBases(input.zone, input.streamingBaseUrl, base)) {
+        try {
+          console.warn(`[Android] Session poll via ${base} failed with HTTP ${error.status}; retrying via ${fallbackBase}.`);
+          recovered = await readSession(fallbackBase);
+          base = fallbackBase;
+          break;
+        } catch (fallbackError) {
+          const fallbackPayload = cloudMatchPayloadFromError(fallbackError);
+          if (fallbackPayload && isPollableSessionPayload(fallbackPayload)) {
+            recovered = fallbackPayload;
+            base = fallbackBase;
+            break;
+          }
+          if (!isNativeHttpError(fallbackError) || !isTransientSessionRouteStatus(fallbackError.status)) {
+            throw fallbackError;
+          }
+        }
+      }
+      if (!recovered) {
+        throw error;
+      } else {
+        response = recovered;
+      }
     }
   }
 
@@ -1163,10 +1331,36 @@ async function setNativePointerCapture(enabled: boolean): Promise<void> {
 }
 
 function onNativeMouseMove(listener: (event: NativeMouseMoveEvent) => void): () => void {
+  return onAndroidPluginEvent("nativeMouseMove", listener);
+}
+
+function onNativeMouseButton(listener: (event: NativeMouseButtonEvent) => void): () => void {
+  return onAndroidPluginEvent("nativeMouseButton", listener);
+}
+
+function onNativeMouseWheel(listener: (event: NativeMouseWheelEvent) => void): () => void {
+  return onAndroidPluginEvent("nativeMouseWheel", listener);
+}
+
+function onLaunchIntent(listener: (event: AndroidLaunchIntent) => void): () => void {
+  return onAndroidPluginEvent("launchIntent", listener);
+}
+
+function onAndroidNativeTouchGamepad(listener: (event: AndroidNativeTouchGamepadEvent) => void): () => void {
+  return onAndroidPluginEvent("nativeTouchGamepad", listener);
+}
+
+function onAndroidPluginEvent<TEvent>(
+  eventName: "nativeMouseMove" | "nativeMouseButton" | "nativeMouseWheel" | "nativeTouchGamepad" | "launchIntent",
+  listener: (event: TEvent) => void,
+): () => void {
   let active = true;
   let handle: PluginListenerHandle | null = null;
 
-  void OpenNowAndroid.addListener("nativeMouseMove", listener)
+  void OpenNowAndroid.addListener(
+    eventName,
+    listener as (event: NativeMouseMoveEvent | NativeMouseButtonEvent | NativeMouseWheelEvent | AndroidNativeTouchGamepadEvent | AndroidLaunchIntent) => void,
+  )
     .then((nextHandle) => {
       if (!active) {
         void nextHandle.remove();
@@ -1235,11 +1429,29 @@ const api: OpenNowApi = {
   togglePointerLock: async () => unsupported("Pointer lock is not supported on Android."),
   setNativePointerCapture,
   onNativeMouseMove,
+  onNativeMouseButton,
+  onNativeMouseWheel,
+  getAndroidPerformanceInfo: async (): Promise<AndroidPerformanceInfo> => OpenNowAndroid.getPerformanceInfo(),
+  setAndroidNativeTouchControls: async (options: AndroidNativeTouchControlsOptions): Promise<boolean> => {
+    try {
+      const result = await OpenNowAndroid.setNativeTouchControls(options);
+      return Boolean(result.enabled);
+    } catch (error) {
+      console.warn("[AndroidTouchOverlay] Native touch controls call failed:", error);
+      return false;
+    }
+  },
+  onAndroidNativeTouchGamepad,
+  consumeLaunchIntent: async (): Promise<AndroidLaunchIntent | null> => {
+    const result = await OpenNowAndroid.consumeLaunchIntent().catch(() => ({ intent: null }));
+    return result.intent ?? null;
+  },
+  onLaunchIntent,
   getSettings: async () => getStoredSettings(),
   setSetting: async (key, value) => { const current = await getStoredSettings(); await saveSettings({ ...current, [key]: value }); },
-  resetSettings: async () => { await saveSettings(DEFAULT_SETTINGS); return { ...DEFAULT_SETTINGS }; },
+  resetSettings: async () => { const settings = normalizeSettings(DEFAULT_SETTINGS); await saveSettings(settings); return settings; },
   getMicrophonePermission: async (): Promise<MicrophonePermissionResult> => ({ platform: "android", isMacOs: false, status: "not-applicable", granted: true, canRequest: true, shouldUseBrowserApi: true }),
-  exportLogs: async () => unsupported("Log export is not supported on Android in this pass."),
+  exportLogs: exportAndroidLogs,
   pingRegions: async (regions: StreamRegion[]): Promise<PingResult[]> => Promise.all(regions.map(tcpPingRegion)),
   saveScreenshot: async (input: ScreenshotSaveRequest): Promise<ScreenshotEntry> => { await ensureDirectory(SCREENSHOT_DIR); const fileName = `${Date.now()}-${Math.random().toString(16).slice(2)}.${dataUrlExtension(input.dataUrl)}`; const filePath = `${SCREENSHOT_DIR}/${fileName}`; await writeBase64File(filePath, decodeDataUrl(input.dataUrl), { relativeToBaseDir: false }); const stat = await Filesystem.stat({ path: filePath, directory: Directory.Data }); const entry: ScreenshotEntry = { id: fileName, fileName, filePath, createdAtMs: Number(stat.ctime ?? Date.now()), sizeBytes: stat.size, dataUrl: input.dataUrl, gameTitle: input.gameTitle }; const entries = await readScreenshotMeta(); await writeScreenshotMeta([{ id: entry.id, fileName: entry.fileName, filePath: entry.filePath, createdAtMs: entry.createdAtMs, sizeBytes: entry.sizeBytes, gameTitle: entry.gameTitle }, ...entries.filter((item) => item.id !== entry.id)]); return entry; },
   listScreenshots: async (): Promise<ScreenshotEntry[]> => { const files = await listDirectory(SCREENSHOT_DIR); const metadata = await readScreenshotMeta(); const metaById = new Map(metadata.map((entry) => [entry.id, entry])); const entries = await Promise.all(files.map(async (file) => { const filePath = `${SCREENSHOT_DIR}/${file.name}`; const stat = await Filesystem.stat({ path: filePath, directory: Directory.Data }); const meta = metaById.get(file.name); return { id: file.name, fileName: file.name, filePath, createdAtMs: meta?.createdAtMs ?? Number(stat.ctime ?? Date.now()), sizeBytes: meta?.sizeBytes ?? stat.size, gameTitle: meta?.gameTitle, dataUrl: await readDataUrl(filePath, screenshotMimeType(file.name)) } satisfies ScreenshotEntry; })); return entries.sort((a, b) => b.createdAtMs - a.createdAtMs); },
@@ -1264,8 +1476,13 @@ const api: OpenNowApi = {
 
 void CapacitorApp.addListener("backButton", () => {
   if (document.fullscreenElement || document.body.dataset.androidFullscreen === "true") {
+    const revealEvent = new CustomEvent("opennow:android-back", { cancelable: true });
+    const handled = !window.dispatchEvent(revealEvent);
+    if (handled) {
+      return;
+    }
     void exitAndroidFullscreenState();
   }
 });
 
-export const capacitorPlatform: OpenNowPlatform = { info: { kind: "android", capabilities: { isAndroid: true, isElectron: false, supportsQuitApp: false, supportsPointerLockToggle: false, supportsDesktopFullscreen: false, supportsLogExport: false, supportsCacheDeletion: false, supportsMediaFolderAccess: false, supportsScreenshotExport: false, supportsPersistentMedia: true, supportsKeyboardShortcuts: false, supportsControllerExitApp: false } }, api };
+export const capacitorPlatform: OpenNowPlatform = { info: { kind: "android", capabilities: { isAndroid: true, isElectron: false, supportsQuitApp: false, supportsPointerLockToggle: false, supportsDesktopFullscreen: false, supportsLogExport: true, supportsCacheDeletion: false, supportsMediaFolderAccess: false, supportsScreenshotExport: false, supportsPersistentMedia: true, supportsKeyboardShortcuts: false, supportsControllerExitApp: false } }, api };

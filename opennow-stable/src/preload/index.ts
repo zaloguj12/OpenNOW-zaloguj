@@ -125,6 +125,10 @@ const api: OpenNowApi = {
   togglePointerLock: () => ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_POINTER_LOCK),
   setNativePointerCapture: async () => undefined,
   onNativeMouseMove: () => () => undefined,
+  onNativeMouseButton: () => () => undefined,
+  onNativeMouseWheel: () => () => undefined,
+  consumeLaunchIntent: async () => null,
+  onLaunchIntent: () => () => undefined,
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, key, value),

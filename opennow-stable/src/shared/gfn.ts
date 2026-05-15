@@ -100,6 +100,15 @@ export function colorQualityIs10Bit(cq: ColorQuality): boolean {
 
 export type MicrophoneMode = "disabled" | "push-to-talk" | "voice-activity";
 export type AspectRatio = "16:9" | "16:10" | "21:9" | "32:9";
+export type AndroidTouchPlacement = "default" | "compact" | "lower" | "split";
+export interface AndroidTouchSettings {
+  enabled: boolean;
+  size: number;
+  opacity: number;
+  placement: AndroidTouchPlacement;
+  mousePad: boolean;
+  mouseCapture: boolean;
+}
 export type RuntimePlatform =
   | "aix"
   | "android"
@@ -161,6 +170,7 @@ export interface Settings {
   autoFullScreen: boolean;
   favoriteGameIds: string[];
   sessionCounterEnabled: boolean;
+  hideFreeTierSessionWarnings: boolean;
   sessionClockShowEveryMinutes: number;
   sessionClockShowDurationSeconds: number;
   windowWidth: number;
@@ -177,6 +187,8 @@ export interface Settings {
   discordRichPresence: boolean;
   /** Automatically check GitHub Releases for app updates in the background */
   autoCheckForUpdates: boolean;
+  /** Android in-stream touch controller and mouse overlay preferences */
+  androidTouchControls: AndroidTouchSettings;
 }
 
 export const DEFAULT_STREAM_PREFERENCES: Readonly<Pick<Settings, "codec" | "colorQuality">> = Object.freeze({
@@ -663,6 +675,29 @@ export type MainToRendererSignalingEvent =
 export interface NativeMouseMoveEvent {
   dx: number;
   dy: number;
+  timestampMs?: number;
+}
+
+export interface NativeMouseButtonEvent {
+  button: number;
+  pressed: boolean;
+  timestampMs?: number;
+}
+
+export interface NativeMouseWheelEvent {
+  delta: number;
+  timestampMs?: number;
+}
+
+export interface AndroidLaunchIntent {
+  sequence: number;
+  receivedAtMs: number;
+  action?: string;
+  data?: string;
+  appId?: string;
+  title?: string;
+  store?: string;
+  source?: string;
 }
 
 /** Dialog result for session conflict resolution */
@@ -701,6 +736,33 @@ export interface AppUpdaterState {
   canDownload: boolean;
   canInstall: boolean;
   isPackaged: boolean;
+}
+
+export interface AndroidPerformanceInfo {
+  totalMemBytes?: number;
+  availMemBytes?: number;
+  thresholdBytes?: number;
+  lowMemory?: boolean;
+  liteTouchRecommended?: boolean;
+}
+
+export interface AndroidNativeTouchControlsOptions {
+  enabled: boolean;
+  size?: number;
+  opacity?: number;
+  placement?: AndroidTouchPlacement;
+}
+
+export interface AndroidNativeTouchGamepadEvent {
+  connected: boolean;
+  buttons: number;
+  leftTrigger: number;
+  rightTrigger: number;
+  leftStickX: number;
+  leftStickY: number;
+  rightStickX: number;
+  rightStickY: number;
+  timestampMs?: number;
 }
 
 export interface OpenNowApi {
@@ -744,6 +806,13 @@ export interface OpenNowApi {
   togglePointerLock(): Promise<void>;
   setNativePointerCapture(enabled: boolean): Promise<void>;
   onNativeMouseMove(listener: (event: NativeMouseMoveEvent) => void): () => void;
+  onNativeMouseButton(listener: (event: NativeMouseButtonEvent) => void): () => void;
+  onNativeMouseWheel(listener: (event: NativeMouseWheelEvent) => void): () => void;
+  getAndroidPerformanceInfo?(): Promise<AndroidPerformanceInfo>;
+  setAndroidNativeTouchControls?(options: AndroidNativeTouchControlsOptions): Promise<boolean>;
+  onAndroidNativeTouchGamepad?(listener: (event: AndroidNativeTouchGamepadEvent) => void): () => void;
+  consumeLaunchIntent(): Promise<AndroidLaunchIntent | null>;
+  onLaunchIntent(listener: (event: AndroidLaunchIntent) => void): () => void;
   getSettings(): Promise<Settings>;
   setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void>;
   resetSettings(): Promise<Settings>;

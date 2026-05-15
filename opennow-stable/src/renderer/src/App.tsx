@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 import { createPortal } from "react-dom";
+import { App as CapacitorApp } from "@capacitor/app";
 
 import type {
   ActiveSessionInfo,
+  AndroidPerformanceInfo,
+  AndroidLaunchIntent,
   AuthSession,
   AuthUser,
   CatalogBrowseResult,
   CatalogFilterGroup,
   CatalogSortOption,
+  ColorQuality,
   ExistingSessionStrategy,
   GameInfo,
   GameVariant,
@@ -26,6 +30,7 @@ import type {
   PrintedWasteQueueData,
   PrintedWasteServerMapping,
 } from "@shared/gfn";
+import { LEGACY_ANDROID_TOUCH_SETTINGS_KEY, normalizeAndroidTouchSettings } from "@shared/settings";
 import {
   DEFAULT_KEYBOARD_LAYOUT,
   getDefaultStreamPreferences,
@@ -63,15 +68,208 @@ import { ControllerStreamLoading } from "./components/ControllerStreamLoading";
 import type { QueueAdPlaybackEvent, QueueAdPreviewHandle } from "./components/QueueAdPreview";
 import { StreamView } from "./components/StreamView";
 import { QueueServerSelectModal } from "./components/QueueServerSelectModal";
+import { LaunchStorePickerModal, hasMultipleLaunchStoreOptions } from "./components/LaunchStorePickerModal";
 
 const codecOptions: VideoCodec[] = [...USER_FACING_VIDEO_CODEC_OPTIONS];
 const DEFAULT_STREAM_PREFERENCES = getDefaultStreamPreferences();
-const allResolutionOptions = ["1280x720", "1280x800", "1440x900", "1680x1050", "1920x1080", "1920x1200", "2560x1080", "2560x1440", "2560x1600", "3440x1440", "3840x2160", "3840x2400"];
+const allResolutionOptions = ["1280x720", "1680x720", "1280x800", "1440x900", "1680x1050", "1920x1080", "1920x1200", "2560x1080", "2560x1440", "2560x1600", "3440x1440", "3840x2160", "3840x2400"];
 const fpsOptions = [30, 60, 120, 144, 240];
 const aspectRatioOptions = ["16:9", "16:10", "21:9", "32:9"] as const;
 
+type EffectiveStreamPreferences = {
+  resolution: string;
+  fps: number;
+  maxBitrateMbps: number;
+  codec: VideoCodec;
+  colorQuality: ColorQuality;
+  compatibilityReason?: string;
+};
+
+type PlayGameOptions = {
+  bypassGuards?: boolean;
+  streamingBaseUrl?: string;
+  variantId?: string;
+};
+
+function readWebGlRendererLabel(): string {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (!gl) {
+      return "";
+    }
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (debugInfo) {
+      return String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? "");
+    }
+    return String(gl.getParameter(gl.RENDERER) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function getAndroidStreamCompatibilityReason(): string | null {
+  if (!platformCapabilities.isAndroid) {
+    return null;
+  }
+
+  const renderer = readWebGlRendererLabel();
+  if (/powervr|ge8320|ge83\d{2}|ge8\d{3}/i.test(renderer)) {
+    return renderer || "PowerVR Android GPU";
+  }
+  const userAgent = navigator.userAgent ?? "";
+  const isTvLikeAndroid =
+    /android tv|google tv|googletv|gtv|smart-?tv|bravia|aft\w*|shield android tv|crkey/i.test(userAgent) ||
+    navigator.maxTouchPoints === 0;
+  if (isTvLikeAndroid) {
+    return "Android TV / Google TV WebView";
+  }
+  return null;
+}
+
+function shouldUseLowPowerAndroidTouchControls(
+  androidCompatibilityReason: string | null,
+  androidPerformanceInfo: AndroidPerformanceInfo | null,
+): boolean {
+  if (/powervr|ge8320|ge83\d{2}|ge8\d{3}/i.test(androidCompatibilityReason ?? "")) {
+    return true;
+  }
+  if (androidPerformanceInfo?.liteTouchRecommended || androidPerformanceInfo?.lowMemory) {
+    return true;
+  }
+  const totalMemBytes = androidPerformanceInfo?.totalMemBytes;
+  return typeof totalMemBytes === "number" && totalMemBytes > 0 && totalMemBytes < 3 * 1024 * 1024 * 1024;
+}
+
+function androidGamePrefersMouseInput(game: GameInfo | null): boolean {
+  if (!platformCapabilities.isAndroid || !game) {
+    return false;
+  }
+
+  if (/runescape|old school rune/i.test(game.title)) {
+    return true;
+  }
+
+  const controls = game.variants.flatMap((variant) => variant.supportedControls ?? []);
+  if (controls.length === 0) {
+    return false;
+  }
+  const normalizedControls = controls.map((control) => control.toLowerCase());
+  const hasMouseKeyboard = normalizedControls.some((control) => (
+    control.includes("mouse") ||
+    control.includes("keyboard") ||
+    control.includes("kbm")
+  ));
+  const hasController = normalizedControls.some((control) => (
+    control.includes("gamepad") ||
+    control.includes("controller")
+  ));
+  return hasMouseKeyboard && !hasController;
+}
+
+function capAndroidCompatibilityResolution(resolution: string): string {
+  const normalizedResolution = normalizeAndroidStreamResolution(resolution);
+  const match = /^(\d+)x(\d+)$/.exec(normalizedResolution);
+  if (!match?.[1] || !match[2]) {
+    return "1920x1080";
+  }
+
+  const width = Number.parseInt(match[1], 10);
+  const height = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return "1920x1080";
+  }
+
+  return width * height > 1920 * 1080 ? "1920x1080" : normalizedResolution;
+}
+
+function normalizeAndroidStreamResolution(resolution: string): string {
+  const match = /^(\d+)x(\d+)$/.exec(resolution);
+  if (!match?.[1] || !match[2]) {
+    return "1920x1080";
+  }
+
+  const width = Number.parseInt(match[1], 10);
+  const height = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return "1920x1080";
+  }
+
+  const ratio = width / height;
+  const isSupportedAspect =
+    Math.abs(ratio - 16 / 9) < 0.01 ||
+    Math.abs(ratio - 16 / 10) < 0.01 ||
+    Math.abs(ratio - 21 / 9) < 0.025 ||
+    Math.abs(ratio - 32 / 9) < 0.025;
+  if (isSupportedAspect) {
+    return resolution;
+  }
+
+  const pixels = width * height;
+  if (pixels <= 1280 * 720) {
+    return "1280x720";
+  }
+  if (pixels <= 1920 * 1080) {
+    return "1920x1080";
+  }
+  if (pixels <= 2560 * 1440) {
+    return "2560x1440";
+  }
+  return "3840x2160";
+}
+
+function getEffectiveStreamPreferences(
+  settings: Settings,
+  androidCompatibilityReason: string | null,
+): EffectiveStreamPreferences {
+  const resolution = platformCapabilities.isAndroid
+    ? normalizeAndroidStreamResolution(settings.resolution)
+    : settings.resolution;
+
+  if (!androidCompatibilityReason) {
+    return {
+      resolution,
+      fps: settings.fps,
+      maxBitrateMbps: settings.maxBitrateMbps,
+      codec: settings.codec,
+      colorQuality: settings.colorQuality,
+    };
+  }
+
+  return {
+    resolution: capAndroidCompatibilityResolution(resolution),
+    fps: Math.min(settings.fps, 60),
+    maxBitrateMbps: Math.min(settings.maxBitrateMbps, 35),
+    codec: "H264",
+    colorQuality: "8bit_420",
+    compatibilityReason: androidCompatibilityReason,
+  };
+}
+
+async function migrateLegacyAndroidTouchSettings(settings: Settings): Promise<Settings> {
+  if (!platformCapabilities.isAndroid || typeof window === "undefined") {
+    return settings;
+  }
+
+  const raw = window.localStorage.getItem(LEGACY_ANDROID_TOUCH_SETTINGS_KEY);
+  if (!raw) {
+    return settings;
+  }
+
+  try {
+    const migrated = normalizeAndroidTouchSettings(JSON.parse(raw));
+    await openNow.setSetting("androidTouchControls", migrated);
+    window.localStorage.removeItem(LEGACY_ANDROID_TOUCH_SETTINGS_KEY);
+    return { ...settings, androidTouchControls: migrated };
+  } catch (error) {
+    console.warn("Failed to migrate Android touch-control settings:", error);
+    return settings;
+  }
+}
+
 const RESOLUTION_TO_ASPECT_RATIO: Record<string, string> = {
   "1280x720": "16:9",
+  "1680x720": "21:9",
   "1280x800": "16:10",
   "1440x900": "16:10",
   "1680x1050": "16:10",
@@ -292,6 +490,48 @@ function findSessionContextForAppId(
   return null;
 }
 
+function withPreferredVariant(game: GameInfo, variant: GameVariant | undefined, launchAppId: string): GameInfo {
+  if (!variant) {
+    return { ...game, launchAppId: game.launchAppId ?? launchAppId };
+  }
+
+  return {
+    ...game,
+    launchAppId,
+    selectedVariantIndex: 0,
+    variants: [variant, ...game.variants.filter((candidate) => candidate.id !== variant.id)],
+  };
+}
+
+function gameFromAndroidLaunchIntent(
+  intent: AndroidLaunchIntent,
+  catalog: GameInfo[],
+  variantByGameId: Record<string, string>,
+): GameInfo | null {
+  const appId = parseNumericId(intent.appId);
+  if (appId === null) {
+    return null;
+  }
+
+  const catalogMatch = findSessionContextForAppId(catalog, variantByGameId, appId);
+  if (catalogMatch) {
+    return withPreferredVariant(catalogMatch.game, catalogMatch.variant, String(appId));
+  }
+
+  const store = intent.store?.trim() || "GeForce NOW";
+  const title = intent.title?.trim() || `GeForce NOW app ${appId}`;
+  return {
+    id: `android-intent:${appId}`,
+    uuid: String(appId),
+    launchAppId: String(appId),
+    title,
+    availableStores: [store],
+    searchText: [title, store, intent.source].filter((value): value is string => Boolean(value)).join(" ").toLowerCase(),
+    selectedVariantIndex: 0,
+    variants: [{ id: String(appId), store, supportedControls: [] }],
+  };
+}
+
 function matchesGameSearch(game: GameInfo, query: string): boolean {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
@@ -386,6 +626,7 @@ function defaultDiagnostics(): StreamDiagnostics {
     connectionState: "closed",
     inputReady: false,
     connectedGamepads: 0,
+    physicalGamepads: 0,
     resolution: "",
     codec: "",
     isHdr: false,
@@ -809,6 +1050,22 @@ function toLaunchErrorState(error: unknown, stage: StreamLoadingStatus): LaunchE
     };
   }
 
+  if (
+    combined.includes("PATCHING") ||
+    combined.includes("MAINTENANCE") ||
+    combined.includes("GAME_UNDER_MAINTENANCE") ||
+    combined.includes("APP_UNDER_MAINTENANCE")
+  ) {
+    return {
+      stage,
+      title: "Game Is Patching",
+      description: "This game is currently patching or under maintenance on GeForce NOW. Try again after the patch finishes.",
+      codeLabel: toCodeLabel(code),
+      debugDetails: extractLaunchErrorDebugDetails(error),
+      occurredAtIso,
+    };
+  }
+
   return {
     stage,
     title: titleFromError || "Launch Failed",
@@ -863,6 +1120,8 @@ export function App(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGameId, setSelectedGameId] = useState("");
   const [variantByGameId, setVariantByGameId] = useState<Record<string, string>>({});
+  const [launchStorePickerGame, setLaunchStorePickerGame] = useState<GameInfo | null>(null);
+  const [pendingLaunchIntent, setPendingLaunchIntent] = useState<AndroidLaunchIntent | null>(null);
   const [isLoadingGames, setIsLoadingGames] = useState(false);
   const [catalogFilterGroups, setCatalogFilterGroups] = useState<CatalogFilterGroup[]>([]);
   const [catalogSortOptions, setCatalogSortOptions] = useState<CatalogSortOption[]>([]);
@@ -907,6 +1166,7 @@ export function App(): JSX.Element {
     autoFullScreen: false,
     favoriteGameIds: [],
     sessionCounterEnabled: false,
+    hideFreeTierSessionWarnings: false,
     sessionClockShowEveryMinutes: 60,
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
@@ -917,10 +1177,12 @@ export function App(): JSX.Element {
     enableCloudGsync: false,
     discordRichPresence: false,
     autoCheckForUpdates: true,
+    androidTouchControls: normalizeAndroidTouchSettings(undefined),
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [codecResults, setCodecResults] = useState<CodecTestResult[] | null>(() => loadStoredCodecResults());
   const [codecTesting, setCodecTesting] = useState(false);
+  const [androidPerformanceInfo, setAndroidPerformanceInfo] = useState<AndroidPerformanceInfo | null>(null);
   const [regions, setRegions] = useState<StreamRegion[]>([]);
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
   const diagnosticsStoreRef = useRef<ReturnType<typeof createStreamDiagnosticsStore> | null>(null);
@@ -946,6 +1208,7 @@ export function App(): JSX.Element {
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [launchError, setLaunchError] = useState<LaunchErrorState | null>(null);
   const [queueModalGame, setQueueModalGame] = useState<GameInfo | null>(null);
+  const [queueModalVariantId, setQueueModalVariantId] = useState<string | null>(null);
   const [queueModalData, setQueueModalData] = useState<PrintedWasteQueueData | null>(null);
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [remoteStreamWarning, setRemoteStreamWarning] = useState<StreamWarningState | null>(null);
@@ -957,7 +1220,10 @@ export function App(): JSX.Element {
   const sessionElapsedSeconds = useElapsedSeconds(sessionStartedAtMs, streamStatus === "streaming");
   const isStreaming = streamStatus === "streaming";
   const freeTierSessionWarningsActive =
-    isStreaming && sessionStartedAtMs !== null && shouldShowFreeTierSessionWarnings(subscriptionInfo);
+    isStreaming &&
+    sessionStartedAtMs !== null &&
+    !settings.hideFreeTierSessionWarnings &&
+    shouldShowFreeTierSessionWarnings(subscriptionInfo);
   const freeTierSessionRemainingSeconds = freeTierSessionWarningsActive
     ? Math.max(0, FREE_TIER_SESSION_LIMIT_SECONDS - sessionElapsedSeconds)
     : null;
@@ -979,6 +1245,57 @@ export function App(): JSX.Element {
   const codecTestPromiseRef = useRef<Promise<CodecTestResult[] | null> | null>(null);
   const codecStartupTestAttemptedRef = useRef(false);
   const navbarSessionActionInFlightRef = useRef<"resume" | "terminate" | null>(null);
+  const androidStreamCompatibilityReason = useMemo(() => getAndroidStreamCompatibilityReason(), []);
+  const lowPowerAndroidTouchControls = useMemo(
+    () => shouldUseLowPowerAndroidTouchControls(androidStreamCompatibilityReason, androidPerformanceInfo),
+    [androidPerformanceInfo, androidStreamCompatibilityReason],
+  );
+  const preferAndroidMouseInput = useMemo(
+    () => androidGamePrefersMouseInput(streamingGame),
+    [streamingGame],
+  );
+  const effectiveStreamPreferences = useMemo(
+    () => getEffectiveStreamPreferences(settings, androidStreamCompatibilityReason),
+    [androidStreamCompatibilityReason, settings],
+  );
+
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid || !openNow.getAndroidPerformanceInfo) {
+      return;
+    }
+
+    let cancelled = false;
+    void openNow.getAndroidPerformanceInfo()
+      .then((info) => {
+        if (!cancelled) {
+          setAndroidPerformanceInfo(info);
+        }
+      })
+      .catch((error) => {
+        console.warn("[Android] Failed to read native performance info:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!effectiveStreamPreferences.compatibilityReason) {
+      return;
+    }
+    if (
+      settings.codec === effectiveStreamPreferences.codec &&
+      settings.colorQuality === effectiveStreamPreferences.colorQuality &&
+      settings.resolution === effectiveStreamPreferences.resolution &&
+      settings.maxBitrateMbps <= effectiveStreamPreferences.maxBitrateMbps &&
+      settings.fps <= effectiveStreamPreferences.fps
+    ) {
+      return;
+    }
+    console.log(
+      `[Android] Using H264/8-bit stream compatibility profile for ${effectiveStreamPreferences.compatibilityReason}`,
+    );
+  }, [effectiveStreamPreferences, settings.codec, settings.colorQuality, settings.fps, settings.maxBitrateMbps]);
 
   const resetStatsOverlayToPreference = useCallback((): void => {
     setShowStatsOverlay(settings.showStatsOnLaunch);
@@ -1072,10 +1389,6 @@ export function App(): JSX.Element {
       window.dispatchEvent(new CustomEvent("opennow:controller-direction", { detail: { direction } }));
       return true;
     }
-    if (settings.controllerMode && currentPage === "settings") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-direction", { detail: { direction } }));
-      return true;
-    }
     return false;
   }, [authSession, currentPage, settings.controllerMode, streamStatus]);
 
@@ -1088,10 +1401,6 @@ export function App(): JSX.Element {
       return false;
     }
     if (settings.controllerMode && currentPage === "library") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-activate"));
-      return true;
-    }
-    if (settings.controllerMode && currentPage === "settings") {
       window.dispatchEvent(new CustomEvent("opennow:controller-activate"));
       return true;
     }
@@ -1110,10 +1419,6 @@ export function App(): JSX.Element {
       window.dispatchEvent(new CustomEvent("opennow:controller-secondary-activate"));
       return true;
     }
-    if (settings.controllerMode && currentPage === "settings") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-secondary-activate"));
-      return true;
-    }
     return false;
   }, [authSession, currentPage, settings.controllerMode, streamStatus]);
 
@@ -1126,10 +1431,6 @@ export function App(): JSX.Element {
       return false;
     }
     if (settings.controllerMode && currentPage === "library") {
-      window.dispatchEvent(new CustomEvent("opennow:controller-tertiary-activate"));
-      return true;
-    }
-    if (settings.controllerMode && currentPage === "settings") {
       window.dispatchEvent(new CustomEvent("opennow:controller-tertiary-activate"));
       return true;
     }
@@ -1147,10 +1448,13 @@ export function App(): JSX.Element {
     && streamStatus === "idle"
     && settings.controllerMode
     && (currentPage === "library" || currentPage === "settings");
-  const controllerUiActive = controllerDesktopModeActive || controllerOverlayOpen;
+  const androidTvLoginNavigationActive = platformCapabilities.isAndroid && !authSession && streamStatus === "idle";
+  const androidShellNavigationActive = platformCapabilities.isAndroid && streamStatus === "idle";
+  const controllerNavigationActive = controllerDesktopModeActive || controllerOverlayOpen || androidShellNavigationActive;
+  const controllerUiActive = controllerDesktopModeActive || controllerOverlayOpen || androidTvLoginNavigationActive;
 
   const controllerConnected = useControllerNavigation({
-    enabled: controllerUiActive,
+    enabled: controllerNavigationActive,
     onNavigatePage: handleControllerPageNavigate,
     onBackAction: handleControllerBackAction,
     onDirectionInput: handleControllerDirectionInput,
@@ -1158,6 +1462,33 @@ export function App(): JSX.Element {
     onSecondaryActivateInput: handleControllerSecondaryActivateInput,
     onTertiaryActivateInput: handleControllerTertiaryActivateInput,
   });
+
+  useEffect(() => {
+    if (!platformCapabilities.isAndroid) return;
+
+    let cancelled = false;
+    let removeListener: (() => void) | null = null;
+
+    void CapacitorApp.addListener("backButton", () => {
+      handleControllerBackAction();
+    }).then((handle) => {
+      if (cancelled) {
+        void handle.remove();
+        return;
+      }
+      removeListener = () => {
+        void handle.remove();
+      };
+    }).catch((error) => {
+      console.warn("[Android] Failed to register back-button handler:", error);
+    });
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
+  }, [handleControllerBackAction]);
+
   const showControllerHint = controllerUiActive
     && controllerConnected
     && !(settings.controllerMode && currentPage === "library");
@@ -1179,12 +1510,15 @@ export function App(): JSX.Element {
           raf = window.requestAnimationFrame(tick);
           return;
         }
-        // Meta/Home button only: button 16 (standard)
-        const metaPressed = Boolean(pad.buttons[16]?.pressed);
-        if (metaPressed && !prev.pressed) {
+        // On Android/TV the Xbox guide button also opens the remote Steam overlay.
+        // Keep that button on the stream path; use View+Menu for OpenNOW's menu.
+        const openNowMenuPressed = platformCapabilities.isAndroid
+          ? Boolean(pad.buttons[8]?.pressed && pad.buttons[9]?.pressed)
+          : Boolean(pad.buttons[16]?.pressed);
+        if (openNowMenuPressed && !prev.pressed) {
           setControllerOverlayOpen((v) => !v);
         }
-        prev.pressed = metaPressed;
+        prev.pressed = openNowMenuPressed;
       } catch {
         // ignore
       }
@@ -1204,6 +1538,7 @@ export function App(): JSX.Element {
   const regionsRequestRef = useRef(0);
   const launchInFlightRef = useRef(false);
   const launchAbortRef = useRef(false);
+  const lastHandledLaunchIntentSequenceRef = useRef<number | null>(null);
   const streamStatusRef = useRef<StreamStatus>(streamStatus);
   const exitPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const adReportQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -1843,7 +2178,7 @@ export function App(): JSX.Element {
     const initialize = async () => {
       try {
         // Load settings first
-        const loadedSettings = await openNow.getSettings();
+        const loadedSettings = await migrateLegacyAndroidTouchSettings(await openNow.getSettings());
         setSettings(loadedSettings);
         setShowStatsOverlay(loadedSettings.showStatsOnLaunch);
         setSettingsLoaded(true);
@@ -2038,6 +2373,11 @@ export function App(): JSX.Element {
 
   const requestEscLockedPointerCapture = useCallback(async (target: HTMLVideoElement) => {
     const lockTarget = (target.parentElement as HTMLElement | null) ?? target;
+    if (platformCapabilities.isAndroid || typeof lockTarget.requestPointerLock !== "function") {
+      target.focus();
+      return;
+    }
+
     const requestPointerLockCompat = async (
       options?: { unadjustedMovement?: boolean },
     ): Promise<void> => {
@@ -2125,7 +2465,8 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     const isSessionConnecting = streamStatus === "connecting" || streamStatus === "streaming";
-    if (!settings.autoFullScreen || !isSessionConnecting) {
+    const shouldEnterFullscreen = settings.autoFullScreen || platformCapabilities.isAndroid;
+    if (!shouldEnterFullscreen || !isSessionConnecting) {
       autoFullscreenRequestedRef.current = false;
       return;
     }
@@ -2306,11 +2647,11 @@ export function App(): JSX.Element {
 
           if (clientRef.current) {
             await clientRef.current.handleOffer(event.sdp, activeSession, {
-              codec: settings.codec,
-              colorQuality: settings.colorQuality,
-              resolution: settings.resolution,
-              fps: settings.fps,
-              maxBitrateKbps: settings.maxBitrateMbps * 1000,
+              codec: effectiveStreamPreferences.codec,
+              colorQuality: effectiveStreamPreferences.colorQuality,
+              resolution: effectiveStreamPreferences.resolution,
+              fps: effectiveStreamPreferences.fps,
+              maxBitrateKbps: effectiveStreamPreferences.maxBitrateMbps * 1000,
             });
             setLaunchError(null);
             setStreamStatus("streaming");
@@ -2332,7 +2673,7 @@ export function App(): JSX.Element {
     });
 
     return () => unsubscribe();
-  }, [resetLaunchRuntime, settings]);
+  }, [effectiveStreamPreferences, resetLaunchRuntime, settings]);
 
   // Save settings when changed
   const updateSetting = useCallback(async <K extends keyof Settings>(key: K, value: Settings[K]) => {
@@ -2583,11 +2924,11 @@ export function App(): JSX.Element {
       sessionId: existingSession.sessionId,
       appId: String(existingSession.appId),
       settings: {
-        resolution: settings.resolution,
-        fps: settings.fps,
-        maxBitrateMbps: settings.maxBitrateMbps,
-        codec: settings.codec,
-        colorQuality: settings.colorQuality,
+        resolution: effectiveStreamPreferences.resolution,
+        fps: effectiveStreamPreferences.fps,
+        maxBitrateMbps: effectiveStreamPreferences.maxBitrateMbps,
+        codec: effectiveStreamPreferences.codec,
+        colorQuality: effectiveStreamPreferences.colorQuality,
         keyboardLayout: settings.keyboardLayout,
         gameLanguage: settings.gameLanguage,
         enableL4S: settings.enableL4S,
@@ -2613,10 +2954,10 @@ export function App(): JSX.Element {
       signalingServer: claimed.signalingServer,
       signalingUrl: claimed.signalingUrl,
     });
-  }, [authSession, effectiveStreamingBaseUrl, findGameContextForSession, resetStatsOverlayToPreference, settings]);
+  }, [authSession, effectiveStreamPreferences, effectiveStreamingBaseUrl, findGameContextForSession, resetStatsOverlayToPreference, settings]);
 
   // Play game handler
-  const handlePlayGame = useCallback(async (game: GameInfo, options?: { bypassGuards?: boolean; streamingBaseUrl?: string }) => {
+  const handlePlayGame = useCallback(async (game: GameInfo, options?: PlayGameOptions) => {
     if (!selectedProvider) return;
 
     console.log("handlePlayGame entry", {
@@ -2648,7 +2989,7 @@ export function App(): JSX.Element {
   setLocalSessionTimerWarning(null);
     setLaunchError(null);
     resetStatsOverlayToPreference();
-    const selectedVariantId = variantByGameId[game.id] ?? defaultVariantId(game);
+    const selectedVariantId = options?.variantId ?? variantByGameId[game.id] ?? defaultVariantId(game);
     const selectedVariant = getSelectedVariant(game, selectedVariantId);
     let appId: string | null = null;
     startPlaytimeSession(game.id);
@@ -2752,11 +3093,11 @@ export function App(): JSX.Element {
         existingSessionStrategy,
         zone: "prod",
         settings: {
-          resolution: settings.resolution,
-          fps: settings.fps,
-          maxBitrateMbps: settings.maxBitrateMbps,
-          codec: settings.codec,
-          colorQuality: settings.colorQuality,
+          resolution: effectiveStreamPreferences.resolution,
+          fps: effectiveStreamPreferences.fps,
+          maxBitrateMbps: effectiveStreamPreferences.maxBitrateMbps,
+          codec: effectiveStreamPreferences.codec,
+          colorQuality: effectiveStreamPreferences.colorQuality,
           keyboardLayout: settings.keyboardLayout,
           gameLanguage: settings.gameLanguage,
           enableL4S: settings.enableL4S,
@@ -2925,6 +3266,7 @@ export function App(): JSX.Element {
     authSession,
     allKnownGames,
     claimAndConnectSession,
+    effectiveStreamPreferences,
     effectiveStreamingBaseUrl,
     refreshNavbarActiveSession,
     resetLaunchRuntime,
@@ -2935,13 +3277,13 @@ export function App(): JSX.Element {
     variantByGameId,
   ]);
 
-  // Gate handler: shows queue server modal for FREE-tier users before launching
-  const handleInitiatePlay = useCallback(async (game: GameInfo) => {
+  const handleLaunchAfterStoreSelection = useCallback(async (game: GameInfo, variantId?: string) => {
     const shouldUsePrintedWasteGate = shouldShowQueueAdsForMembership(subscriptionInfo, authSession);
     const isAllianceServer = isAllianceStreamingBaseUrl(effectiveStreamingBaseUrl);
     if (isAllianceServer) {
       setQueueModalData(null);
-      void handlePlayGame(game);
+      setQueueModalVariantId(null);
+      void handlePlayGame(game, { variantId });
       return;
     }
     if (shouldUsePrintedWasteGate && streamStatus === "idle" && !launchInFlightRef.current) {
@@ -2960,14 +3302,16 @@ export function App(): JSX.Element {
             },
           );
           setQueueModalData(null);
-          void handlePlayGame(game);
+          setQueueModalVariantId(null);
+          void handlePlayGame(game, { variantId });
           return;
         }
 
         const queueData = queueResult.value;
         if (!queueData || Object.keys(queueData).length === 0) {
           setQueueModalData(null);
-          void handlePlayGame(game);
+          setQueueModalVariantId(null);
+          void handlePlayGame(game, { variantId });
           return;
         }
 
@@ -2976,38 +3320,147 @@ export function App(): JSX.Element {
             "[QueueServerSelect] No eligible non-nuked PrintedWaste zones available, skipping queue checks.",
           );
           setQueueModalData(null);
-          void handlePlayGame(game);
+          setQueueModalVariantId(null);
+          void handlePlayGame(game, { variantId });
           return;
         }
 
         setQueueModalData(queueData);
         setQueueModalGame(game);
+        setQueueModalVariantId(variantId ?? null);
       } catch (error) {
         console.warn("[QueueServerSelect] PrintedWaste queue checks failed, launching without modal.", error);
         setQueueModalData(null);
-        void handlePlayGame(game);
+        setQueueModalVariantId(null);
+        void handlePlayGame(game, { variantId });
       }
       return;
     }
-    void handlePlayGame(game);
+    void handlePlayGame(game, { variantId });
   }, [subscriptionInfo, authSession, streamStatus, handlePlayGame, effectiveStreamingBaseUrl]);
+
+  // Gate handler: asks for a store on multi-store games, then shows queue server modal for FREE-tier users before launching.
+  const handleInitiatePlay = useCallback(async (game: GameInfo) => {
+    if (streamStatus === "idle" && !launchInFlightRef.current && hasMultipleLaunchStoreOptions(game)) {
+      setLaunchStorePickerGame(game);
+      return;
+    }
+    await handleLaunchAfterStoreSelection(game);
+  }, [handleLaunchAfterStoreSelection, streamStatus]);
 
   const handleQueueModalConfirm = useCallback((zoneUrl: string | null) => {
     const game = queueModalGame;
+    const variantId = queueModalVariantId ?? undefined;
     setQueueModalGame(null);
+    setQueueModalVariantId(null);
     setQueueModalData(null);
     if (game) {
-      void handlePlayGame(game, { streamingBaseUrl: zoneUrl ?? undefined });
+      void handlePlayGame(game, { streamingBaseUrl: zoneUrl ?? undefined, variantId });
     }
-  }, [queueModalGame, handlePlayGame]);
+  }, [queueModalGame, queueModalVariantId, handlePlayGame]);
 
   const handleQueueModalCancel = useCallback(() => {
     setQueueModalGame(null);
+    setQueueModalVariantId(null);
     setQueueModalData(null);
   }, []);
 
   useEffect(() => {
+    if (!platformCapabilities.isAndroid) {
+      return;
+    }
+
+    let active = true;
+    const enqueueLaunchIntent = (intent: AndroidLaunchIntent): void => {
+      if (!active) {
+        return;
+      }
+      setPendingLaunchIntent((previous) => previous?.sequence === intent.sequence ? previous : intent);
+    };
+
+    const unsubscribe = openNow.onLaunchIntent(enqueueLaunchIntent);
+    void openNow.consumeLaunchIntent()
+      .then((intent) => {
+        if (intent) {
+          enqueueLaunchIntent(intent);
+        }
+      })
+      .catch((error) => {
+        console.warn("[Android Intent] Failed to consume pending launch intent:", error);
+      });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingLaunchIntent) {
+      return;
+    }
+    if (lastHandledLaunchIntentSequenceRef.current === pendingLaunchIntent.sequence) {
+      return;
+    }
+    if (isInitializing) {
+      return;
+    }
+    if (!authSession || !selectedProvider) {
+      console.warn("[Android Intent] Launch intent received before sign-in; waiting for an authenticated session.", pendingLaunchIntent);
+      return;
+    }
+    if (launchInFlightRef.current || streamStatus !== "idle" || navbarSessionActionInFlightRef.current) {
+      console.warn("[Android Intent] Ignoring launch intent because a session action is already active.", {
+        sequence: pendingLaunchIntent.sequence,
+        streamStatus,
+        launchInFlight: launchInFlightRef.current,
+        navbarSessionAction: navbarSessionActionInFlightRef.current,
+      });
+      lastHandledLaunchIntentSequenceRef.current = pendingLaunchIntent.sequence;
+      setPendingLaunchIntent(null);
+      return;
+    }
+
+    const intentGame = gameFromAndroidLaunchIntent(pendingLaunchIntent, allKnownGames, variantByGameId);
+    if (!intentGame) {
+      console.warn("[Android Intent] Ignoring launch intent without a numeric appId.", pendingLaunchIntent);
+      lastHandledLaunchIntentSequenceRef.current = pendingLaunchIntent.sequence;
+      setPendingLaunchIntent(null);
+      return;
+    }
+
+    console.log("[Android Intent] Launching game from intent.", {
+      sequence: pendingLaunchIntent.sequence,
+      appId: pendingLaunchIntent.appId,
+      title: intentGame.title,
+      source: pendingLaunchIntent.source,
+    });
+    lastHandledLaunchIntentSequenceRef.current = pendingLaunchIntent.sequence;
+    setPendingLaunchIntent(null);
+    void handleInitiatePlay(intentGame);
+  }, [
+    allKnownGames,
+    authSession,
+    handleInitiatePlay,
+    isInitializing,
+    pendingLaunchIntent,
+    selectedProvider,
+    streamStatus,
+    variantByGameId,
+  ]);
+
+  useEffect(() => {
     if (!logoutConfirmOpen) return;
+
+    const focusFirstAction = window.setTimeout(() => {
+      const firstAction = document.querySelector<HTMLElement>(".logout-confirm-btn-cancel");
+      if (!firstAction) return;
+      document.querySelectorAll<HTMLElement>(".controller-focus").forEach((node) => {
+        node.classList.remove("controller-focus");
+      });
+      firstAction.classList.add("controller-focus");
+      firstAction.focus({ preventScroll: true });
+    }, 0);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -3024,10 +3477,25 @@ export function App(): JSX.Element {
     document.body.style.overflow = "hidden";
 
     return () => {
+      window.clearTimeout(focusFirstAction);
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
     };
   }, [confirmLogout, logoutConfirmOpen]);
+
+  const handleLaunchStorePickerCancel = useCallback(() => {
+    setLaunchStorePickerGame(null);
+  }, []);
+
+  const handleLaunchStorePickerConfirm = useCallback((variantId: string) => {
+    const game = launchStorePickerGame;
+    if (!game) {
+      return;
+    }
+    handleSelectGameVariant(game.id, variantId);
+    setLaunchStorePickerGame(null);
+    void handleLaunchAfterStoreSelection(game, variantId);
+  }, [handleLaunchAfterStoreSelection, handleSelectGameVariant, launchStorePickerGame]);
 
   const logoutConfirmModal = logoutConfirmOpen && typeof document !== "undefined"
     ? createPortal(
@@ -3035,6 +3503,7 @@ export function App(): JSX.Element {
           <button
             type="button"
             className="logout-confirm-backdrop"
+            tabIndex={-1}
             onClick={() => setLogoutConfirmOpen(false)}
             aria-label="Cancel log out"
           />
@@ -3635,6 +4104,18 @@ export function App(): JSX.Element {
             onTouchMouseTap={(input) => {
               clientRef.current?.sendTouchMouseTap(input);
             }}
+            onTouchMouseButton={(input) => {
+              clientRef.current?.sendTouchMouseButton(input);
+            }}
+            onTouchMouseWheel={(input) => {
+              clientRef.current?.sendTouchMouseWheel(input);
+            }}
+            androidTouchControls={settings.androidTouchControls}
+            onAndroidTouchControlsChange={(value) => {
+              void updateSetting("androidTouchControls", value);
+            }}
+            lowPowerTouchControls={lowPowerAndroidTouchControls}
+            preferAndroidMouseInput={preferAndroidMouseInput}
             onSendText={(text) => clientRef.current?.sendText(text) ?? 0}
             onSendKeyPress={(key) => {
               clientRef.current?.sendKeyPress(key);
@@ -3968,6 +4449,15 @@ export function App(): JSX.Element {
       )}
 
       {logoutConfirmModal}
+      {launchStorePickerGame && streamStatus === "idle" && (
+        <LaunchStorePickerModal
+          game={launchStorePickerGame}
+          selectedVariantId={variantByGameId[launchStorePickerGame.id] ?? defaultVariantId(launchStorePickerGame)}
+          onSelectVariant={(variantId) => handleSelectGameVariant(launchStorePickerGame.id, variantId)}
+          onConfirm={handleLaunchStorePickerConfirm}
+          onCancel={handleLaunchStorePickerCancel}
+        />
+      )}
       {queueModalGame && streamStatus === "idle" && (
         <QueueServerSelectModal
           game={queueModalGame}

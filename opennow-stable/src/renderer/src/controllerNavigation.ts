@@ -46,11 +46,12 @@ function isElementDisabled(el: HTMLElement): boolean {
 }
 
 function getFocusScopeRoot(): ParentNode {
-  const overlay = document.querySelector(".controller-overlay");
-  if (overlay) return overlay as ParentNode;
-
-  const exitDialog = document.querySelector(".sv-exit");
-  if (exitDialog) return exitDialog;
+  const modalScope = Array.from(document.querySelectorAll<HTMLElement>(
+    ".controller-overlay, .sv-exit, .logout-confirm, .navbar-modal, [role='dialog'][aria-modal='true']",
+  ))
+    .filter(isElementVisible)
+    .at(-1);
+  if (modalScope) return modalScope;
 
   const navbarModal = document.querySelector(".navbar-modal");
   if (navbarModal) return navbarModal;
@@ -72,6 +73,10 @@ function listInteractiveElements(): HTMLElement[] {
   const candidates = Array.from(scopeRoot.querySelectorAll(INTERACTIVE_SELECTOR))
     .filter(isElementInteractive)
     .filter((el) => el.tabIndex >= 0)
+    .filter((el) => {
+      const card = el.closest(".game-card");
+      return !card || card === el;
+    })
     .filter((el) => !isElementDisabled(el) && isElementVisible(el));
   return candidates;
 }
@@ -91,6 +96,71 @@ function setControllerFocus(el: HTMLElement): void {
   el.classList.add("controller-focus");
   el.focus({ preventScroll: true });
   el.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function canScrollVertically(container: HTMLElement, direction: Direction): boolean {
+  if (direction !== "up" && direction !== "down") return false;
+  const maxScrollTop = container.scrollHeight - container.clientHeight;
+  if (maxScrollTop <= 1) return false;
+  if (direction === "up") return container.scrollTop > 1;
+  return container.scrollTop < maxScrollTop - 1;
+}
+
+function getScrollableAncestor(el: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = el;
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current);
+    const canScroll = /(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight + 1;
+    if (canScroll) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function scrollActiveContainer(active: HTMLElement, direction: Direction): boolean {
+  const container = getScrollableAncestor(active);
+  if (!container || !canScrollVertically(container, direction)) return false;
+  const distance = Math.max(120, Math.floor(container.clientHeight * 0.72));
+  container.scrollBy({
+    top: direction === "down" ? distance : -distance,
+    behavior: "smooth",
+  });
+  return true;
+}
+
+function scopeDirectionalItems(active: HTMLElement, items: HTMLElement[], direction: Direction): HTMLElement[] {
+  if (getFocusScopeRoot() !== document) return items;
+
+  const settingsContent = active.closest<HTMLElement>(".settings-content");
+  if (settingsContent) {
+    const scoped = items.filter((item) => settingsContent.contains(item));
+    if (direction === "up" && !canScrollVertically(settingsContent, "up")) {
+      const sidebarItems = items.filter((item) => Boolean(item.closest(".settings-sidebar")));
+      return [...scoped, ...sidebarItems];
+    }
+    return scoped.length > 0 ? scoped : items;
+  }
+
+  const settingsSidebar = active.closest<HTMLElement>(".settings-sidebar");
+  if (settingsSidebar) {
+    if (direction === "left" || direction === "right" || direction === "up") {
+      const scoped = items.filter((item) => settingsSidebar.contains(item));
+      return scoped.length > 0 ? scoped : items;
+    }
+    const content = document.querySelector<HTMLElement>(".settings-content");
+    if (content) {
+      const contentItems = items.filter((item) => content.contains(item));
+      if (contentItems.length > 0) return contentItems;
+    }
+  }
+
+  const mainContent = active.closest<HTMLElement>(".main-content");
+  if (mainContent) {
+    const scoped = items.filter((item) => mainContent.contains(item));
+    return scoped.length > 0 ? scoped : items;
+  }
+
+  return items;
 }
 
 function adjustRangeInput(input: HTMLInputElement, direction: Direction): boolean {
@@ -125,6 +195,38 @@ function setRangeEditMode(input: HTMLInputElement | null): void {
   }
 }
 
+function shouldKeepTextInputKeyEvent(target: HTMLElement, event: KeyboardEvent): boolean {
+  if (target instanceof HTMLInputElement && target.type === "range") {
+    return false;
+  }
+
+  if (
+    !(target instanceof HTMLInputElement) &&
+    !(target instanceof HTMLTextAreaElement) &&
+    !target.isContentEditable
+  ) {
+    return false;
+  }
+
+  // TV remotes and controller-to-keyboard bridges often land on search inputs.
+  // Let vertical/back navigation escape those fields instead of trapping users
+  // until they find Tab, while preserving normal text editing for typing and
+  // horizontal caret movement.
+  if (
+    event.key === "ArrowUp" ||
+    event.key === "Up" ||
+    event.key === "ArrowDown" ||
+    event.key === "Down" ||
+    event.key === "Escape" ||
+    event.key === "Backspace" ||
+    event.key === "BrowserBack"
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function moveFocus(direction: Direction): void {
   const current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (
@@ -136,11 +238,18 @@ function moveFocus(direction: Direction): void {
     return;
   }
 
-  const items = listInteractiveElements();
-  if (items.length === 0) return;
+  const allItems = listInteractiveElements();
+  if (allItems.length === 0) return;
 
-  const active = current && items.includes(current) ? current : null;
+  const active = current && allItems.includes(current) ? current : null;
   if (!active) {
+    setControllerFocus(allItems[0]);
+    return;
+  }
+
+  const items = scopeDirectionalItems(active, allItems, direction);
+  if (items.length === 0) return;
+  if (!items.includes(active)) {
     setControllerFocus(items[0]);
     return;
   }
@@ -176,11 +285,7 @@ function moveFocus(direction: Direction): void {
     return;
   }
 
-  if (direction === "left" || direction === "up") {
-    setControllerFocus(items[items.length - 1]);
-  } else {
-    setControllerFocus(items[0]);
-  }
+  scrollActiveContainer(active, direction);
 }
 
 function activateFocusedElement(): void {
@@ -294,6 +399,55 @@ export function useControllerNavigation({
       setControllerFocus(items[0]);
     }
   }, [controllerConnected, enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (target && shouldKeepTextInputKeyEvent(target, event)) {
+        return;
+      }
+
+      const directionByKey: Record<string, Direction | undefined> = {
+        ArrowUp: "up",
+        Up: "up",
+        ArrowDown: "down",
+        Down: "down",
+        ArrowLeft: "left",
+        Left: "left",
+        ArrowRight: "right",
+        Right: "right",
+      };
+      const direction = directionByKey[event.key];
+      if (direction) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!onDirectionInput?.(direction)) {
+          moveFocus(direction);
+        }
+        return;
+      }
+
+      if (event.key === "Enter" || event.key === "NumpadEnter" || event.key === " ") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!onActivateInput?.()) {
+          activateFocusedElement();
+        }
+        return;
+      }
+
+      if (event.key === "Escape" || event.key === "Backspace" || event.key === "BrowserBack") {
+        event.preventDefault();
+        event.stopPropagation();
+        triggerBackAction(onBackAction);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [enabled, onActivateInput, onBackAction, onDirectionInput]);
 
   useEffect(() => {
     function updateConnected(next: boolean): void {
