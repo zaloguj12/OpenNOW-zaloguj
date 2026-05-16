@@ -12,6 +12,7 @@ import type {
   GameInfo,
   LoginProvider,
   MainToRendererSignalingEvent,
+  NativeStreamerShortcutAction,
   SessionInfo,
   SessionStopRequest,
   SavedAccount,
@@ -30,6 +31,7 @@ import {
 } from "@shared/gfn";
 import { GfnWebRtcClient } from "./gfn/webrtcClient";
 import { formatShortcutForDisplay, isShortcutMatch, normalizeShortcut } from "./shortcuts";
+import { dispatchStreamShortcutAction } from "./streamShortcutActions";
 import { useControllerNavigation } from "./controllerNavigation";
 import { useElapsedSeconds } from "./utils/useElapsedSeconds";
 import { useQueueAdRuntime } from "./hooks/useQueueAdRuntime";
@@ -325,6 +327,7 @@ export function App(): JSX.Element {
   const codecStartupTestAttemptedRef = useRef(false);
   const navbarSessionActionInFlightRef = useRef<"resume" | "terminate" | null>(null);
   const nativeStreamingRef = useRef(false);
+  const handleStreamShortcutActionRef = useRef<((action: NativeStreamerShortcutAction) => void) | null>(null);
 
   const resetStatsOverlayToPreference = useCallback((): void => {
     setShowStatsOverlay(settings.showStatsOnLaunch);
@@ -699,16 +702,6 @@ export function App(): JSX.Element {
     settings.resolution,
     settings.streamClientMode,
   ]);
-
-  const buildSignalingConnectRequest = useCallback((activeSession: SessionInfo): SignalingConnectRequest => {
-    const streamSettings = buildCurrentStreamSettings();
-    return {
-      sessionId: activeSession.sessionId,
-      signalingServer: activeSession.signalingServer,
-      signalingUrl: activeSession.signalingUrl,
-      nativeStreamer: buildNativeStreamerSessionContext(activeSession, streamSettings),
-    };
-  }, [buildCurrentStreamSettings]);
 
   const warmNativeStreamerForLaunch = useCallback((): void => {
     if (settings.streamClientMode !== "native") {
@@ -1198,6 +1191,27 @@ export function App(): JSX.Element {
     settings.shortcutScreenshot,
     settings.shortcutToggleRecording,
   ]);
+
+  const nativeStreamerShortcuts = useMemo(() => ({
+    toggleStats: shortcuts.toggleStats.canonical,
+    togglePointerLock: shortcuts.togglePointerLock.canonical,
+    toggleFullscreen: shortcuts.toggleFullscreen.canonical,
+    stopStream: shortcuts.stopStream.canonical,
+    toggleAntiAfk: shortcuts.toggleAntiAfk.canonical,
+    toggleMicrophone: shortcuts.toggleMicrophone.canonical,
+    screenshot: shortcuts.screenshot.canonical,
+    toggleRecording: shortcuts.recording.canonical,
+  }), [shortcuts]);
+
+  const buildSignalingConnectRequest = useCallback((activeSession: SessionInfo): SignalingConnectRequest => {
+    const streamSettings = buildCurrentStreamSettings();
+    return {
+      sessionId: activeSession.sessionId,
+      signalingServer: activeSession.signalingServer,
+      signalingUrl: activeSession.signalingUrl,
+      nativeStreamer: buildNativeStreamerSessionContext(activeSession, streamSettings, nativeStreamerShortcuts),
+    };
+  }, [buildCurrentStreamSettings, nativeStreamerShortcuts]);
 
   const setSessionFullscreen = useCallback(async (nextFullscreen: boolean) => {
     const canUseNativeFullscreen = typeof window.openNow?.setFullscreen === "function";
@@ -2437,6 +2451,8 @@ export function App(): JSX.Element {
           if (nativeStreamingRef.current || sessionRef.current) {
             activateNativeInputForCurrentSession(event.protocolVersion);
           }
+        } else if (event.type === "native-shortcut") {
+          handleStreamShortcutActionRef.current?.(event.action);
         } else if (event.type === "native-stream-stats") {
           diagnosticsStore.set(mergeNativeStreamStats(
             diagnosticsStore.getSnapshot(),
@@ -3365,6 +3381,59 @@ export function App(): JSX.Element {
     await handleStopStream();
   }, [handleStopStream, releasePointerLockIfNeeded, requestExitPrompt, streamStatus, streamingGame?.title, t]);
 
+  const handleStreamShortcutAction = useCallback((action: NativeStreamerShortcutAction): void => {
+    switch (action) {
+      case "toggleStats":
+        setShowStatsOverlay((prev) => !prev);
+        return;
+      case "togglePointerLock":
+        {
+          const targetVideo = videoRef.current;
+          if (streamStatus === "streaming" && targetVideo) {
+            if (document.pointerLockElement === targetVideo) {
+              const client = clientRef.current as { suppressNextSyntheticEscape?: boolean } | null;
+              if (client) {
+                client.suppressNextSyntheticEscape = true;
+              }
+              document.exitPointerLock();
+            } else {
+              void requestPointerLockCapture(targetVideo);
+            }
+          }
+        }
+        return;
+      case "toggleFullscreen":
+        if (streamStatus === "connecting" || streamStatus === "streaming") {
+          void toggleSessionFullscreen();
+        }
+        return;
+      case "stopStream":
+        void handlePromptedStopStream();
+        return;
+      case "toggleAntiAfk":
+        if (streamStatus === "streaming") {
+          setAntiAfkEnabled((prev) => !prev);
+          setAntiAfkAckNonce((n) => n + 1);
+        }
+        return;
+      case "toggleMicrophone":
+        if (streamStatus === "streaming") {
+          clientRef.current?.toggleMicrophone();
+        }
+        return;
+      case "screenshot":
+      case "toggleRecording":
+        if (streamStatus === "streaming") {
+          dispatchStreamShortcutAction(action);
+        }
+        return;
+    }
+  }, [handlePromptedStopStream, requestPointerLockCapture, streamStatus, toggleSessionFullscreen]);
+
+  useEffect(() => {
+    handleStreamShortcutActionRef.current = handleStreamShortcutAction;
+  }, [handleStreamShortcutAction]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3425,7 +3494,7 @@ export function App(): JSX.Element {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setShowStatsOverlay((prev) => !prev);
+        handleStreamShortcutAction("toggleStats");
         return;
       }
 
@@ -3433,6 +3502,8 @@ export function App(): JSX.Element {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
+        handleStreamShortcutAction("togglePointerLock");
+        return;
         if (streamStatus === "streaming" && videoRef.current) {
           if (document.pointerLockElement === videoRef.current) {
             try {
@@ -3442,7 +3513,7 @@ export function App(): JSX.Element {
             }
             document.exitPointerLock();
           } else {
-            void requestPointerLockCapture(videoRef.current);
+            void requestPointerLockCapture(videoRef.current!);
           }
         }
         return;
