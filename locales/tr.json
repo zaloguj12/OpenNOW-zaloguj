@@ -537,6 +537,8 @@
       "enablePromptEsc": "iptal etmek",
       "reportOnGithubIssues": "GitHub Sorunları Hakkında Rapor Oluşturun",
       "reportOnDiscord": "Discord'da Rapor Ver",
+      "showNativeStreamerStats": "Show Native Streamer Stats",
+      "showNativeStreamerStatsHint": "Display the native streamer's own diagnostics overlay during native sessions.",
       "streamerStatus": "Yayıncı Durumu",
       "checkNativeStreamer": "Yerel yayıncıyı kontrol edin",
       "gstreamerReady": "Gstreamer'a Hazır",
