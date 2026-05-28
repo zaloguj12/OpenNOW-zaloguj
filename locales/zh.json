@@ -537,6 +537,8 @@
       "enablePromptEsc": "取消",
       "reportOnGithubIssues": "GitHub 问题报告",
       "reportOnDiscord": "报告不和谐",
+      "showNativeStreamerStats": "Show Native Streamer Stats",
+      "showNativeStreamerStatsHint": "Display the native streamer's own diagnostics overlay during native sessions.",
       "streamerStatus": "主播状态",
       "checkNativeStreamer": "检查原生流媒体",
       "gstreamerReady": "GStreamer 就绪",
