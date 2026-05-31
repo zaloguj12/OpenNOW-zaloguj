@@ -3212,6 +3212,16 @@ body,
   will-change: transform;
 }
 
+.home-page .game-card:focus,
+.home-page .game-card:focus-visible {
+  outline: none;
+}
+
+.home-page .game-card.selected {
+  border-color: var(--panel-border);
+  box-shadow: none;
+}
+
 .game-card::after {
   content: "";
   position: absolute;
@@ -3245,6 +3255,10 @@ body,
   background: var(--bg-c);
   backface-visibility: hidden;
   flex: 1;
+}
+
+.home-page .game-card-image-wrapper {
+  padding-top: var(--game-aspect, 56.25%);
 }
 
 .game-card-image {
@@ -3281,23 +3295,30 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity var(--t-normal);
+  pointer-events: none;
 }
 
-.game-card:hover .game-card-overlay {
+.game-card:hover .game-card-gradient,
+.game-card:hover .game-card-play-button {
   opacity: 1;
+}
+
+.game-card:hover .game-card-play-button {
+  pointer-events: auto;
 }
 
 .game-card-gradient {
   position: absolute;
   inset: 0;
   background: linear-gradient(to bottom, transparent 30%, rgba(10, 10, 12, 0.72) 60%, rgba(10, 10, 12, 0.92) 100%);
+  opacity: 0;
+  transition: opacity var(--t-normal);
+  z-index: 1;
 }
 
 .game-card-play-button {
   position: relative;
-  z-index: 1;
+  z-index: 4;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -3307,9 +3328,11 @@ body,
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform var(--t-fast), background var(--t-fast);
+  transition: opacity var(--t-normal), transform var(--t-fast), background var(--t-fast);
   box-shadow: 0 4px 16px var(--accent-glow);
   color: var(--accent-on);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .game-card-play-button:hover {
