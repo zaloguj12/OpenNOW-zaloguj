@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = retardo del buffer de fluctuación",
       "packetLoss": "Porcentaje de pérdida de paquetes",
       "packetLossValue": "{{value}}% de pérdida",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "Presión de la cola de entrada (bytes almacenados en búfer y descarga retrasada)",
       "inputChannelState": "Estado del canal de entrada parcialmente confiable y bytes en cola",
       "mouseFlushCadence": "Cadencia de descarga del mouse y velocidad de paquetes"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "Barra lateral",
-    "closeSettings": "Cerrar configuración"
+    "closeSettings": "Cerrar configuración",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "Configuración",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Muestra el juego que estás transmitiendo como tu actividad de Discord, incluido el tiempo transcurrido.",
       "posterSize": "Tamaño del póster",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "Contador de sesión transcurrida",
       "sessionElapsedCounterHint": "Habilite o deshabilite el contador de sesión transcurrida en vivo durante la transmisión.",
       "sessionTimerReappear": "Reaparece el temporizador de sesión",
