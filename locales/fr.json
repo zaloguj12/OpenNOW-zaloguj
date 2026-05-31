@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = délai du tampon de gigue",
       "packetLoss": "Pourcentage de perte de paquets",
       "packetLossValue": "{{value}} % de perte",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "Pression de la file d'attente d'entrée (octets mis en mémoire tampon et vidage retardé)",
       "inputChannelState": "État du canal d'entrée partiellement fiable et octets en file d'attente",
       "mouseFlushCadence": "Cadence de vidage de la souris et débit de paquets"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "Barre latérale",
-    "closeSettings": "Fermer les paramètres"
+    "closeSettings": "Fermer les paramètres",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "Paramètres",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Affichez le jeu que vous diffusez comme activité Discord, y compris le temps écoulé.",
       "posterSize": "Taille de l'affiche",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "Compteur de session écoulée",
       "sessionElapsedCounterHint": "Activez ou désactivez le compteur de sessions en direct écoulées pendant la diffusion.",
       "sessionTimerReappear": "La minuterie de session réapparaît",
