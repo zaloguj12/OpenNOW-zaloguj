@@ -90,6 +90,10 @@ This repository intentionally does not carry duplicate long-form product, setup,
 └── img.png                  App preview image
 ```
 
+## Sponsors
+
+OpenNOW's CI usage is generously sponsored by [Blacksmith](https://www.blacksmith.sh/), helping keep builds and releases fast for the open-source project.
+
 ## Contributing
 
 Contributions are welcome. Read the [contributing guide](.github/CONTRIBUTING.md), keep changes focused, and explain user-facing impact clearly. When changing localized copy, edit only `locales/en.json`; Crowdin manages the other locale files.
