@@ -449,6 +449,7 @@ export function HomePage({
   }, [controllerMode]);
 
   if (controllerMode) {
+    const showInitialLoading = isLoading && controllerSections.length === 0;
     const heroGame = controllerHeroGames[controllerHeroIndex];
     const heroImageUrl = heroGame ? getControllerStoreImageCandidates(heroGame, true)[0] : undefined;
     const heroLogoUrl = heroGame ? getControllerStoreLogoUrl(heroGame) : undefined;
@@ -458,7 +459,7 @@ export function HomePage({
 
     return (
       <div className="home-page controller-store-page">
-        {isLoading ? (
+        {showInitialLoading ? (
           <div className="home-empty-state controller-store-empty">
             <Loader2 className="home-spinner" size={54} />
             <p>{t("home.empty.loadingGames")}</p>
@@ -545,9 +546,10 @@ export function HomePage({
   }
 
   const hasGames = games.length > 0;
+  const showInitialLoading = isLoading && !hasGames;
   const visibleFilterGroups = filterGroups.filter((group) => ["digital_store", "genre", "subscriptions"].includes(group.id));
   const activeFilterCount = selectedFilterIds.length;
-  const countLabel = isLoading
+  const countLabel = showInitialLoading
     ? t("home.count.loading")
     : totalCount > games.length && supportedCount > 0
       ? t("home.count.shownTotalSupported", { shown: games.length, total: totalCount, supported: supportedCount })
@@ -608,7 +610,7 @@ export function HomePage({
 
         <label className="home-sort">
           <ArrowUpDown size={14} />
-          <select value={selectedSortId} onChange={(e) => onSortChange(e.target.value)} disabled={isLoading}>
+          <select value={selectedSortId} onChange={(e) => onSortChange(e.target.value)} disabled={showInitialLoading}>
             {sortOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
@@ -623,7 +625,7 @@ export function HomePage({
       </header>
 
       <div className="home-grid-area">
-        {isLoading ? (
+        {showInitialLoading ? (
           <div className="home-empty-state">
             <Loader2 className="home-spinner" size={36} />
             <p>{t("home.empty.loadingGames")}</p>
@@ -644,7 +646,6 @@ export function HomePage({
               <GameCard
                 key={game.id}
                 game={game}
-                isSelected={game.id === selectedGameId}
                 onSelect={() => onSelectGame(game.id)}
                 onPlay={() => onPlayGame(game)}
                 selectedVariantId={selectedVariantByGameId[game.id]}
