@@ -2104,12 +2104,13 @@ export function App(): JSX.Element {
     if (activeGameId) {
       endPlaytimeSession(activeGameId);
     }
+    markExplicitSignalingShutdown();
     clientRef.current?.dispose();
     clientRef.current = null;
     launchInFlightRef.current = false;
     resetLaunchRuntime();
     void refreshNavbarActiveSession();
-  }, [endPlaytimeSession, refreshNavbarActiveSession, resetLaunchRuntime]);
+  }, [endPlaytimeSession, markExplicitSignalingShutdown, refreshNavbarActiveSession, resetLaunchRuntime]);
 
   // Signaling events
   useEffect(() => {
@@ -2470,7 +2471,7 @@ export function App(): JSX.Element {
     });
 
     return () => unsubscribe();
-  }, [attemptSessionRecovery, diagnosticsStore, handleControllerMetaToggle, handleExpectedNativeSessionClose, refreshNavbarActiveSession, resetLaunchRuntime, scheduleStableRecoveryReset, settings, streamMicLevel, streamVolume, t]);
+  }, [attemptSessionRecovery, diagnosticsStore, handleExpectedNativeSessionClose, refreshNavbarActiveSession, resetLaunchRuntime, scheduleStableRecoveryReset, settings, streamMicLevel, streamVolume, t]);
 
   // Play game handler
   const handlePlayGame = useCallback(async (game: GameInfo, options?: { bypassGuards?: boolean; streamingBaseUrl?: string }) => {
