@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = jitter buffer delay",
       "packetLoss": "Packet loss percentage",
       "packetLossValue": "{{value}}% loss",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "Input queue pressure (buffered bytes and delayed flush)",
       "inputChannelState": "Partially reliable input channel state and queued bytes",
       "mouseFlushCadence": "Mouse flush cadence and packet rate"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "Sidebar",
-    "closeSettings": "Close settings"
+    "closeSettings": "Close settings",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "Settings",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Show the game you are streaming as your Discord activity, including elapsed time.",
       "posterSize": "Poster Size",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "Session Elapsed Counter",
       "sessionElapsedCounterHint": "Enable or disable the live session elapsed counter while streaming.",
       "sessionTimerReappear": "Session Timer Reappear",
