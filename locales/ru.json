@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = задержка буфера джиттера",
       "packetLoss": "Процент потери пакетов",
       "packetLossValue": "Потеря {{value}}%",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "Давление входной очереди (буферизованные байты и отложенная очистка)",
       "inputChannelState": "Частично надежное состояние входного канала и байты в очереди",
       "mouseFlushCadence": "Частота нажатия мыши и скорость передачи пакетов"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "Боковая панель",
-    "closeSettings": "Закрыть настройки"
+    "closeSettings": "Закрыть настройки",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "Настройки",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Покажите игру, которую вы транслируете, как свою активность в Discord, включая прошедшее время.",
       "posterSize": "Размер плаката",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "Счетчик истекшего сеанса",
       "sessionElapsedCounterHint": "Включите или отключите счетчик прошедшего сеанса прямой трансляции во время потоковой передачи.",
       "sessionTimerReappear": "Таймер сеанса появляется снова",
