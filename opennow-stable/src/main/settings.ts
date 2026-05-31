@@ -111,6 +111,8 @@ export interface Settings {
   favoriteGameIds: string[];
   /** Enable the live elapsed session counter */
   sessionCounterEnabled: boolean;
+  /** Also show the session-limit countdown in the stats overlay while streaming */
+  showSessionTimeRemainingInStatsOverlay: boolean;
   /** Window width */
   windowWidth: number;
   /** Window height */
@@ -196,6 +198,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoFullScreen: false,
   favoriteGameIds: [],
   sessionCounterEnabled: false,
+  showSessionTimeRemainingInStatsOverlay: false,
   sessionClockShowEveryMinutes: 60,
   sessionClockShowDurationSeconds: 30,
   windowWidth: 1400,
@@ -231,12 +234,19 @@ export class SettingsManager {
       }
 
       const content = readFileSync(this.settingsPath, "utf-8");
-      const parsed = JSON.parse(content) as Partial<Settings>;
+      type PersistedSettings = Partial<Settings> & {
+        sessionTimeRemainingDisplay?: unknown;
+      };
+      const parsed = JSON.parse(content) as PersistedSettings;
+      const {
+        sessionTimeRemainingDisplay: legacySessionTimeDisplay,
+        ...parsedSettings
+      } = parsed;
 
       // Merge with defaults to ensure all fields exist
       const merged: Settings = {
         ...DEFAULT_SETTINGS,
-        ...parsed,
+        ...parsedSettings,
       };
 
       let migrated = this.migrateLegacyShortcutDefaults(merged);
@@ -251,6 +261,12 @@ export class SettingsManager {
       // Migrate legacy boolean accelerator setting to percentage slider.
       if (typeof (parsed as { mouseAcceleration?: unknown }).mouseAcceleration === "boolean") {
         merged.mouseAcceleration = (parsed as { mouseAcceleration?: boolean }).mouseAcceleration ? 100 : 1;
+        migrated = true;
+      }
+
+      // Migrate a short-lived prerelease display enum while keeping the old key out of saved settings.
+      if (legacySessionTimeDisplay === "stats" || legacySessionTimeDisplay === "both") {
+        merged.showSessionTimeRemainingInStatsOverlay = true;
         migrated = true;
       }
 

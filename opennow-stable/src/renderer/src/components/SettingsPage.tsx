@@ -10,17 +10,17 @@ import type {
   EntitledResolution,
   VideoAccelerationPreference,
   MicrophoneMode,
-    PingResult,
-    GameLanguage,
-    MicrophonePermissionResult,
-    ThankYouDataResult,
-    ThankYouContributor,
-    ThankYouSupporter,
-    AppUpdaterState,
-    NativeStreamerStatus,
-    NativeVideoBackendCapability,
-    NativeVideoBackendPreference,
-  } from "@shared/gfn";
+  PingResult,
+  GameLanguage,
+  MicrophonePermissionResult,
+  ThankYouDataResult,
+  ThankYouContributor,
+  ThankYouSupporter,
+  AppUpdaterState,
+  NativeStreamerStatus,
+  NativeVideoBackendCapability,
+  NativeVideoBackendPreference,
+} from "@shared/gfn";
 import {
   createUnsupportedNativeStreamerStatus,
   isNativeStreamerSupportedPlatform,
@@ -158,6 +158,11 @@ const SETTINGS_SCOPE_SEARCH_TERMS: Record<SettingsSearchScopeId, readonly string
     "rich presence",
     "poster",
     "session timer",
+    "session time left",
+    "session countdown",
+    "free tier time",
+    "priority time",
+    "ultimate time",
     "counter",
     "controller",
     "gamepad",
@@ -3370,6 +3375,21 @@ export function SettingsPage({ settings, regions, onSettingChange, codecResults,
                     onChange={(e) => handleChange("posterSizeScale", Number(e.target.value) / 100)}
                   />
                   <span className="settings-subtle-hint">{t("settings.interface.posterSizeHint")}</span>
+                </div>
+
+                <div className="settings-row">
+                  <label className="settings-label">
+                    {t("settings.interface.showSessionTimeRemainingInStatsOverlay")}
+                    <span className="settings-hint">{t("settings.interface.showSessionTimeRemainingInStatsOverlayHint")}</span>
+                  </label>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={settings.showSessionTimeRemainingInStatsOverlay}
+                      onChange={(e) => handleChange("showSessionTimeRemainingInStatsOverlay", e.target.checked)}
+                    />
+                    <span className="settings-toggle-track" />
+                  </label>
                 </div>
 
                 {/* Session Counter */}

@@ -21,6 +21,7 @@ import {
   getTimingColor,
 } from "../utils/streamDiagnosticsFormat";
 import { formatElapsed } from "../utils/timeFormat";
+import { useTranslation } from "../i18n";
 
 const ANTI_AFK_TOGGLE_ACK_MS = 5000;
 
@@ -53,6 +54,8 @@ interface StreamViewProps {
   sessionStartedAtMs: number | null;
   isStreaming: boolean;
   sessionCounterEnabled: boolean;
+  showSessionTimeRemainingInStatsOverlay: boolean;
+  sessionTimeRemainingSeconds: number | null;
   sessionClockShowEveryMinutes: number;
   sessionClockShowDurationSeconds: number;
   streamWarning: {
@@ -80,6 +83,7 @@ interface StreamViewProps {
   onMicrophoneModeChange: (value: MicrophoneMode) => void;
   onScreenshotShortcutChange: (value: string) => void;
   onRecordingShortcutChange: (value: string) => void;
+  onShowSessionTimeRemainingInStatsOverlayChange: (value: boolean) => void;
   subscriptionInfo: SubscriptionInfo | null;
   micTrack?: MediaStreamTrack | null;
   className?: string;
@@ -139,6 +143,13 @@ function formatWarningSeconds(value: number | undefined): string | null {
   return `${seconds}s`;
 }
 
+function formatSessionTimeRemaining(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return formatElapsed(value);
+}
+
 type MicBadgeState = {
   connectedGamepads: number;
   micState: MicState;
@@ -157,11 +168,14 @@ function StreamStatsHud({
   diagnosticsStore,
   gstreamerEnabled,
   serverRegion,
+  sessionTimeRemainingText,
 }: {
   diagnosticsStore: StreamDiagnosticsStore;
   gstreamerEnabled: boolean;
   serverRegion?: string;
+  sessionTimeRemainingText: string | null;
 }): JSX.Element {
+  const { t } = useTranslation();
   const stats = useStreamDiagnosticsStore(diagnosticsStore);
   const hasLiveBitrate = stats.bitrateKbps > 0;
   const bitrateKbps = hasLiveBitrate ? stats.bitrateKbps : stats.targetBitrateKbps;
@@ -228,6 +242,11 @@ function StreamStatsHud({
         <span className="sv-stats-chip" title="Round-trip network latency">
           RTT <span className="sv-stats-chip-val" style={{ color: getRttColor(stats.rttMs) }}>{stats.rttMs > 0 ? `${stats.rttMs.toFixed(0)}ms` : "--"}</span>
         </span>
+        {sessionTimeRemainingText && (
+          <span className="sv-stats-chip sv-stats-chip--time" title={t("sidebar.sessionTimeRemainingTitle")}>
+            {t("stream.stats.timeRemainingShort")} <span className="sv-stats-chip-val">{sessionTimeRemainingText}</span>
+          </span>
+        )}
         <span className="sv-stats-chip" title="D = decode time">
           D <span className="sv-stats-chip-val" style={{ color: decodeColor }}>{dText}</span>
         </span>
@@ -549,6 +568,8 @@ export function StreamView({
   sessionStartedAtMs,
   isStreaming,
   sessionCounterEnabled,
+  showSessionTimeRemainingInStatsOverlay,
+  sessionTimeRemainingSeconds,
   sessionClockShowEveryMinutes,
   sessionClockShowDurationSeconds,
   streamWarning,
@@ -571,12 +592,14 @@ export function StreamView({
   onMicrophoneModeChange,
   onScreenshotShortcutChange,
   onRecordingShortcutChange,
+  onShowSessionTimeRemainingInStatsOverlayChange,
   subscriptionInfo,
   micTrack,
   hideStreamButtons = false,
   allowEscapeToExitFullscreen,
   className,
 }: StreamViewProps): JSX.Element {
+  const { t } = useTranslation();
   const [showHints, setShowHints] = useState(true);
   const [showSessionClock, setShowSessionClock] = useState(false);
   const [antiAfkToggleAck, setAntiAfkToggleAck] = useState<"on" | "off" | null>(null);
@@ -728,6 +751,9 @@ export function StreamView({
   }, [antiAfkAckNonce, antiAfkEnabled, showAntiAfkIndicator, isConnecting]);
 
   const warningSeconds = formatWarningSeconds(streamWarning?.secondsLeft);
+  const sessionTimeRemainingText = formatSessionTimeRemaining(sessionTimeRemainingSeconds);
+  const showSessionTimeRemainingInStats =
+    sessionTimeRemainingText !== null && showSessionTimeRemainingInStatsOverlay;
   const platformName = platformStore ? getStoreDisplayName(platformStore) : "";
   const PlatformIcon = platformStore ? getStoreIconComponent(platformStore) : null;
   const isMacClient = navigator.platform?.toLowerCase().includes("mac") || navigator.userAgent.includes("Macintosh");
@@ -1534,6 +1560,30 @@ export function StreamView({
               <span className="sidebar-stat-label">Remaining Playtime</span>
               <RemainingPlaytimeIndicator subscriptionInfo={subscriptionInfo} startedAtMs={sessionStartedAtMs} active={isStreaming} className="settings-value-badge" />
             </div>
+            {sessionTimeRemainingText !== null && (
+              <div className="sidebar-stat-line sidebar-stat-line--stacked" title={t("sidebar.sessionTimeRemainingTitle")}>
+                <span className="sidebar-stat-label">{t("sidebar.sessionTimeRemaining")}</span>
+                <div className="sidebar-session-time-controls">
+                  <span className="settings-value-badge sidebar-session-time-left">
+                    <Clock3 size={10} />
+                    <span>{sessionTimeRemainingText}</span>
+                  </span>
+                  <label
+                    className="sidebar-mini-toggle"
+                    title={t("sidebar.showSessionTimeRemainingInStatsOverlay")}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showSessionTimeRemainingInStatsOverlay}
+                      aria-label={t("sidebar.showSessionTimeRemainingInStatsOverlay")}
+                      onChange={(event) => onShowSessionTimeRemainingInStatsOverlayChange(event.target.checked)}
+                    />
+                    <span className="sidebar-mini-toggle-track" />
+                    <span>{t("sidebar.statsOverlay")}</span>
+                  </label>
+                </div>
+              </div>
+            )}
             <div className="sidebar-tabs" role="tablist" aria-label="Sidebar sections">
               <button
                 type="button"
@@ -2018,6 +2068,7 @@ export function StreamView({
           diagnosticsStore={diagnosticsStore}
           gstreamerEnabled={gstreamerEnabled}
           serverRegion={serverRegion}
+          sessionTimeRemainingText={showSessionTimeRemainingInStats ? sessionTimeRemainingText : null}
         />
       )}
 

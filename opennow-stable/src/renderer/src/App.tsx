@@ -67,6 +67,7 @@ import {
 } from "./lib/queueAds";
 import { clearRuntimeSnapshot, loadRuntimeSnapshot, saveRuntimeSnapshot, type RuntimeSnapshot } from "./lib/runtimeSnapshot";
 import {
+  getSessionLimitSecondsForTier,
   getLocalSessionTimerWarning,
   hasCrossedWarningThreshold,
   shouldShowFreeTierSessionWarnings,
@@ -113,7 +114,6 @@ function isNvidiaProvider(provider: LoginProvider | null | undefined): boolean {
 const SESSION_READY_POLL_INTERVAL_MS = 2000;
 const SESSION_AD_POLL_INTERVAL_MS = 30000;
 const PLAYTIME_RESYNC_INTERVAL_MS = 5 * 60 * 1000;
-const FREE_TIER_SESSION_LIMIT_SECONDS = 60 * 60;
 const FREE_TIER_30_MIN_WARNING_SECONDS = 30 * 60;
 const FREE_TIER_15_MIN_WARNING_SECONDS = 15 * 60;
 const FREE_TIER_FINAL_MINUTE_WARNING_SECONDS = 60;
@@ -181,6 +181,22 @@ const DEFAULT_SHORTCUTS = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function readStreamClipboardText(): Promise<string> {
+  try {
+    const browserClipboard = navigator.clipboard;
+    if (browserClipboard?.readText) {
+      const text = await browserClipboard.readText();
+      if (text) {
+        return text;
+      }
+    }
+  } catch {
+    // Electron main-process clipboard is the reliable fallback on Linux.
+  }
+
+  return window.openNow.readClipboardText();
 }
 
 export function App(): JSX.Element {
@@ -267,6 +283,7 @@ export function App(): JSX.Element {
     autoFullScreen: false,
     favoriteGameIds: [],
     sessionCounterEnabled: false,
+    showSessionTimeRemainingInStatsOverlay: false,
     sessionClockShowEveryMinutes: 60,
     sessionClockShowDurationSeconds: 30,
     windowWidth: 1400,
@@ -316,8 +333,17 @@ export function App(): JSX.Element {
   const isStreaming = streamStatus === "streaming";
   const freeTierSessionWarningsActive =
     isStreaming && sessionStartedAtMs !== null && shouldShowFreeTierSessionWarnings(subscriptionInfo);
+  const sessionLimitTier = useMemo(() => {
+    const subscriptionTier = normalizeMembershipTier(subscriptionInfo?.membershipTier);
+    const authTier = normalizeMembershipTier(authSession?.user.membershipTier);
+    return subscriptionTier ?? authTier;
+  }, [authSession?.user.membershipTier, subscriptionInfo?.membershipTier]);
+  const sessionLimitSeconds = getSessionLimitSecondsForTier(sessionLimitTier);
+  const sessionTimeRemainingSeconds = isStreaming && sessionStartedAtMs !== null && sessionLimitSeconds !== null
+    ? Math.max(0, sessionLimitSeconds - sessionElapsedSeconds)
+    : null;
   const freeTierSessionRemainingSeconds = freeTierSessionWarningsActive
-    ? Math.max(0, FREE_TIER_SESSION_LIMIT_SECONDS - sessionElapsedSeconds)
+    ? sessionTimeRemainingSeconds
     : null;
   const visibleLocalSessionTimerWarning = useMemo(() => {
     if (localSessionTimerWarning === null || freeTierSessionRemainingSeconds === null) {
@@ -2153,6 +2179,7 @@ export function App(): JSX.Element {
         microphoneDeviceId: settings.microphoneDeviceId || undefined,
         mouseSensitivity: settings.mouseSensitivity,
         mouseAcceleration: settings.mouseAcceleration,
+        keyboardLayout: settings.keyboardLayout,
         onLog: (line: string) => console.log(`[WebRTC] ${line}`),
         onStats: (stats) => diagnosticsStore.set(stats),
         onTimeWarning: (warning) => {
@@ -3342,10 +3369,11 @@ export function App(): JSX.Element {
             if (!client) return;
 
             try {
-              const text = await navigator.clipboard.readText();
-              if (text && client.sendText(text) > 0) {
-                return;
+              const text = await readStreamClipboardText();
+              if (text) {
+                client.sendText(text);
               }
+              return;
             } catch (error) {
               console.warn("Clipboard read failed, falling back to paste shortcut:", error);
             }
@@ -3523,6 +3551,8 @@ export function App(): JSX.Element {
             exitPrompt={exitPrompt}
             sessionStartedAtMs={sessionStartedAtMs}
             sessionCounterEnabled={settings.sessionCounterEnabled}
+            showSessionTimeRemainingInStatsOverlay={settings.showSessionTimeRemainingInStatsOverlay}
+            sessionTimeRemainingSeconds={sessionTimeRemainingSeconds}
             sessionClockShowEveryMinutes={settings.sessionClockShowEveryMinutes}
             sessionClockShowDurationSeconds={settings.sessionClockShowDurationSeconds}
             streamWarning={streamWarning}
@@ -3553,6 +3583,9 @@ export function App(): JSX.Element {
             }}
             onRecordingShortcutChange={(value) => {
               void updateSetting("shortcutToggleRecording", value);
+            }}
+            onShowSessionTimeRemainingInStatsOverlayChange={(value) => {
+              void updateSetting("showSessionTimeRemainingInStatsOverlay", value);
             }}
             subscriptionInfo={subscriptionInfo}
             micTrack={clientRef.current?.getMicTrack() ?? null}

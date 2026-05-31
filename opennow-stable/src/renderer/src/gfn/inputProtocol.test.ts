@@ -96,6 +96,21 @@ test("maps punctuation using platform keyCode on non-US layouts", () => {
   assert.deepEqual(mapKeyboardEvent(event), { vk: 191, scancode: 0 });
 });
 
+test("maps OEM punctuation physically when a non-English GFN layout is selected", () => {
+  assert.deepEqual(
+    mapKeyboardEvent(keyboardEvent({ code: "BracketLeft", key: "ü", keyCode: 186 }), "de-DE"),
+    { vk: codeMap.BracketLeft.vk, scancode: 0 },
+  );
+  assert.deepEqual(
+    mapKeyboardEvent(keyboardEvent({ code: "Semicolon", key: "ö", keyCode: 192 }), "de-DE"),
+    { vk: codeMap.Semicolon.vk, scancode: 0 },
+  );
+  assert.deepEqual(
+    mapKeyboardEvent(keyboardEvent({ code: "Backquote", key: "^", keyCode: 220 }), "de-DE"),
+    { vk: codeMap.Backquote.vk, scancode: 0 },
+  );
+});
+
 test("falls back to key-based escape detection when code is unavailable", () => {
   const event = keyboardEvent({ code: "", key: "Escape", keyCode: 27 });
   assert.deepEqual(mapKeyboardEvent(event), { vk: 27, scancode: 0 });
@@ -133,6 +148,17 @@ test("uses physical scancodes for synthetic text injection", () => {
   assert.deepEqual(mapTextCharToKeySpec("<"), { ...codeMap.Comma, shift: true });
   assert.deepEqual(mapTextCharToKeySpec("/"), { ...codeMap.Slash });
   assert.deepEqual(mapTextCharToKeySpec("?"), { ...codeMap.Slash, shift: true });
+});
+
+test("uses German physical keys for synthetic text injection with de-DE layout", () => {
+  assert.deepEqual(mapTextCharToKeySpec("ü", "de-DE"), { ...codeMap.BracketLeft });
+  assert.deepEqual(mapTextCharToKeySpec("ö", "de-DE"), { ...codeMap.Semicolon });
+  assert.deepEqual(mapTextCharToKeySpec("ä", "de-DE"), { ...codeMap.Quote });
+  assert.deepEqual(mapTextCharToKeySpec("ß", "de-DE"), { ...codeMap.Minus });
+  assert.deepEqual(mapTextCharToKeySpec("y", "de-DE"), { ...codeMap.KeyZ });
+  assert.deepEqual(mapTextCharToKeySpec("z", "de-DE"), { ...codeMap.KeyY });
+  assert.deepEqual(mapTextCharToKeySpec("/", "de-DE"), { ...codeMap.Digit7, shift: true });
+  assert.deepEqual(mapTextCharToKeySpec("_", "de-DE"), { ...codeMap.Slash, shift: true });
 });
 
 test("modifierFlags matches official yS() (no lock keys in per-key byte)", () => {

@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   POINTER_LOCK_CHANGE: "window:pointer-lock-change",
   EXTERNAL_ESCAPE: "app:external-escape",
   OPEN_EXTERNAL_URL: "app:open-external-url",
+  CLIPBOARD_READ_TEXT: "clipboard:read-text",
   QUIT_APP: "app:quit",
   APP_UPDATER_GET_STATE: "app-updater:get-state",
   APP_UPDATER_CHECK: "app-updater:check",

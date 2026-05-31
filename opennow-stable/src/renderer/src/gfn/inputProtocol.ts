@@ -1,3 +1,5 @@
+import type { KeyboardLayout } from "@shared/gfn";
+
 export const INPUT_HEARTBEAT = 2;
 export const INPUT_KEY_DOWN = 3;
 export const INPUT_KEY_UP = 4;
@@ -280,6 +282,30 @@ const specialVirtualKeyByCode: Record<string, number> = {
   NumpadComma: 0xbc,
 };
 
+const physicalOemVirtualKeyCodes = new Set([
+  "Minus",
+  "Equal",
+  "BracketLeft",
+  "BracketRight",
+  "Backslash",
+  "IntlBackslash",
+  "IntlRo",
+  "IntlYen",
+  "Semicolon",
+  "Quote",
+  "Backquote",
+  "Comma",
+  "Period",
+  "Slash",
+]);
+
+function shouldUsePhysicalOemVirtualKey(event: KeyLike, layout?: KeyboardLayout): boolean {
+  if (!layout || layout === "en-US" || layout === "en-GB") {
+    return false;
+  }
+  return physicalOemVirtualKeyCodes.has(event.code);
+}
+
 const keyFallbackMap: Record<string, KeyMapping> = {
   Escape: { vk: 0x1b, scancode: 0x0001 },
   Esc: { vk: 0x1b, scancode: 0x0001 },
@@ -335,6 +361,64 @@ const shiftedCharCodeMap: Record<string, string> = {
   "<": "Comma",
   ">": "Period",
   "?": "Slash",
+};
+
+const germanBaseCharCodeMap: Record<string, string> = {
+  " ": "Space",
+  "\n": "Enter",
+  "\r": "Enter",
+  "\t": "Tab",
+  "0": "Digit0",
+  "1": "Digit1",
+  "2": "Digit2",
+  "3": "Digit3",
+  "4": "Digit4",
+  "5": "Digit5",
+  "6": "Digit6",
+  "7": "Digit7",
+  "8": "Digit8",
+  "9": "Digit9",
+  "y": "KeyZ",
+  "z": "KeyY",
+  "ß": "Minus",
+  "´": "Equal",
+  "ü": "BracketLeft",
+  "+": "BracketRight",
+  "#": "Backslash",
+  "ö": "Semicolon",
+  "ä": "Quote",
+  ",": "Comma",
+  ".": "Period",
+  "^": "Backquote",
+  "-": "Slash",
+  "<": "IntlBackslash",
+};
+
+const germanShiftedCharCodeMap: Record<string, string> = {
+  "!": "Digit1",
+  '"': "Digit2",
+  "§": "Digit3",
+  "$": "Digit4",
+  "%": "Digit5",
+  "&": "Digit6",
+  "/": "Digit7",
+  "(": "Digit8",
+  ")": "Digit9",
+  "=": "Digit0",
+  "Y": "KeyZ",
+  "Z": "KeyY",
+  "?": "Minus",
+  "`": "Equal",
+  "Ü": "BracketLeft",
+  "*": "BracketRight",
+  "'": "Backslash",
+  "Ö": "Semicolon",
+  "Ä": "Quote",
+  "°": "Backquote",
+  ";": "Comma",
+  ":": "Period",
+  "_": "Slash",
+  ">": "IntlBackslash",
 };
 
 function defaultVirtualKeyFromCode(code: string): number | null {
@@ -464,7 +548,14 @@ function virtualKeyFromKeyValue(key: string): number | null {
   return null;
 }
 
-function virtualKeyFromEvent(event: KeyLike): number | null {
+function virtualKeyFromEvent(event: KeyLike, layout?: KeyboardLayout): number | null {
+  if (shouldUsePhysicalOemVirtualKey(event, layout)) {
+    const physicalVk = defaultVirtualKeyFromCode(event.code);
+    if (physicalVk !== null) {
+      return physicalVk;
+    }
+  }
+
   return (
     virtualKeyFromKeyCode(event)
     ?? virtualKeyFromKeyValue(event.key)
@@ -480,13 +571,16 @@ function textKeySpecFromCode(code: string, shift: boolean = false): TextKeySpec 
   return shift ? { ...mapped, shift: true } : mapped;
 }
 
-export function mapTextCharToKeySpec(char: string): TextKeySpec | null {
-  const baseCode = baseCharCodeMap[char];
+export function mapTextCharToKeySpec(char: string, layout?: KeyboardLayout): TextKeySpec | null {
+  const baseMap = layout === "de-DE" ? germanBaseCharCodeMap : baseCharCodeMap;
+  const shiftedMap = layout === "de-DE" ? germanShiftedCharCodeMap : shiftedCharCodeMap;
+
+  const baseCode = baseMap[char];
   if (baseCode) {
     return textKeySpecFromCode(baseCode);
   }
 
-  const shiftedCode = shiftedCharCodeMap[char];
+  const shiftedCode = shiftedMap[char];
   if (shiftedCode) {
     return textKeySpecFromCode(shiftedCode, true);
   }
@@ -827,8 +921,8 @@ export function lockKeysStateFromEvent(event: KeyboardEvent): number {
   return state;
 }
 
-export function mapKeyboardEvent(event: KeyboardEvent): KeyMapping | null {
-  const vk = virtualKeyFromEvent(event);
+export function mapKeyboardEvent(event: KeyboardEvent, layout?: KeyboardLayout): KeyMapping | null {
+  const vk = virtualKeyFromEvent(event, layout);
   if (vk === null || vk === 0) {
     return null;
   }

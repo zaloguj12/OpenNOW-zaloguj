@@ -7,6 +7,7 @@ import type {
   MicrophoneMode,
   NativeTransitionDiagnostics,
   NativeQueueMode,
+  KeyboardLayout,
 } from "@shared/gfn";
 
 import {
@@ -223,6 +224,8 @@ interface ClientOptions {
   mouseSensitivity?: number;
   /** Software acceleration strength percentage (1-150) */
   mouseAcceleration?: number;
+  /** Selected GFN keyboard layout for remote physical OEM key mapping. */
+  keyboardLayout?: KeyboardLayout;
   onLog: (line: string) => void;
   onStats?: (stats: StreamDiagnostics) => void;
   onTimeWarning?: (warning: StreamTimeWarning) => void;
@@ -696,6 +699,7 @@ export class GfnWebRtcClient {
   private mouseDeltaFilter = new MouseDeltaFilter();
   private mouseSensitivity = 1;
   private mouseAccelerationPercent = 1;
+  private keyboardLayout?: KeyboardLayout;
   private autoFullScreenEnabled = true;
 
   private partialReliableThresholdMs = GfnWebRtcClient.DEFAULT_PARTIAL_RELIABLE_THRESHOLD_MS;
@@ -802,6 +806,7 @@ export class GfnWebRtcClient {
     options.audioElement.volume = this.outputVolume;
     this.mouseSensitivity = options.mouseSensitivity ?? 1;
     this.mouseAccelerationPercent = Math.max(1, Math.min(150, Math.round(options.mouseAcceleration ?? 1)));
+    this.keyboardLayout = options.keyboardLayout;
     this.autoFullScreenEnabled = options.autoFullScreen !== false;
 
     // Configure video element for lowest latency playback
@@ -3008,7 +3013,7 @@ export class GfnWebRtcClient {
     let sent = 0;
     const maxChars = 4096;
     for (const char of text.slice(0, maxChars)) {
-      const key = mapTextCharToKeySpec(char);
+      const key = mapTextCharToKeySpec(char, this.keyboardLayout);
       if (!key) {
         continue;
       }
@@ -3427,7 +3432,7 @@ export class GfnWebRtcClient {
         || event.key === "Esc"
         || event.code === "Escape"
         || event.keyCode === 27;
-      const mapped = mapKeyboardEvent(event) ?? (isEscapeEvent ? codeMap.Escape : null);
+      const mapped = mapKeyboardEvent(event, this.keyboardLayout) ?? (isEscapeEvent ? codeMap.Escape : null);
 
       // Keep browser from handling held keys (for example Tab focus traversal)
       // while streaming input is active.
@@ -3471,7 +3476,7 @@ export class GfnWebRtcClient {
         || event.key === "Esc"
         || event.code === "Escape"
         || event.keyCode === 27;
-      const mapped = mapKeyboardEvent(event) ?? (isEscapeEvent ? codeMap.Escape : null);
+      const mapped = mapKeyboardEvent(event, this.keyboardLayout) ?? (isEscapeEvent ? codeMap.Escape : null);
       if (!mapped) {
         return;
       }

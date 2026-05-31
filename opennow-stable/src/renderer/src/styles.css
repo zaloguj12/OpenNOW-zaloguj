@@ -5940,6 +5940,16 @@ button.game-card-store-chip.owned.active:hover {
   color: var(--ink-soft);
 }
 
+.sv-stats-chip--time {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+  background: var(--accent-surface);
+}
+
+.sv-stats-chip--time .sv-stats-chip-val {
+  color: var(--accent);
+}
+
 .sv-stats-foot {
   font-size: 0.64rem;
   color: var(--ink-muted);
@@ -7253,12 +7263,78 @@ button.game-card-store-chip.owned.active:hover {
   gap: 8px;
 }
 
+.sidebar-stat-line--stacked {
+  align-items: flex-start;
+}
+
 .sidebar-stat-label {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--ink-soft);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.sidebar-session-time-controls {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar-session-time-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-mini-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sidebar-mini-toggle input {
+  display: none;
+}
+
+.sidebar-mini-toggle-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--panel-border);
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.sidebar-mini-toggle-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--ink-muted);
+  transition: transform var(--t-fast), background var(--t-fast);
+}
+
+.sidebar-mini-toggle input:checked+.sidebar-mini-toggle-track {
+  background: var(--accent-surface);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+}
+
+.sidebar-mini-toggle input:checked+.sidebar-mini-toggle-track::before {
+  transform: translateX(12px);
+  background: var(--accent);
 }
 
 .sidebar-tabs {

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
   dialog,
   shell,
@@ -934,6 +935,10 @@ function registerIpcHandlers(): void {
   // Settings IPC handlers
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (): Promise<Settings> => {
     return settingsManager.getAll();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CLIPBOARD_READ_TEXT, async (): Promise<string> => {
+    return clipboard.readText();
   });
 
   ipcMain.handle(
