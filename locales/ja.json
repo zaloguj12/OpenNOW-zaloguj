@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = ジッターバッファ遅延",
       "packetLoss": "パケットロスの割合",
       "packetLossValue": "{{value}}% の損失",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "入力キューのプレッシャー (バッファリングされたバイトと遅延フラッシュ)",
       "inputChannelState": "部分的に信頼できる入力チャネルの状態とキューに入れられたバイト数",
       "mouseFlushCadence": "マウスのフラッシュ ケイデンスとパケット レート"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "サイドバー",
-    "closeSettings": "設定を閉じる"
+    "closeSettings": "設定を閉じる",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "設定",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Discord アクティビティとしてストリーミングしているゲームを、経過時間を含めて表示します。",
       "posterSize": "ポスターサイズ",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "セッション経過カウンター",
       "sessionElapsedCounterHint": "ストリーミング中のライブ セッション経過カウンターを有効または無効にします。",
       "sessionTimerReappear": "セッションタイマーが再表示される",
