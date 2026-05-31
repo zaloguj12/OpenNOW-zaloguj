@@ -310,6 +310,7 @@
       "jitterBuffer": "JB = Jitter-Pufferverzögerung",
       "packetLoss": "Prozentsatz des Paketverlusts",
       "packetLossValue": "{{value}} % Verlust",
+      "timeRemainingShort": "Left",
       "inputQueuePressure": "Druck in der Eingabewarteschlange (gepufferte Bytes und verzögertes Leeren)",
       "inputChannelState": "Teilweise zuverlässiger Eingangskanalstatus und Bytes in der Warteschlange",
       "mouseFlushCadence": "Mausfrequenz und Paketrate"
@@ -364,7 +365,11 @@
   },
   "sidebar": {
     "title": "Seitenleiste",
-    "closeSettings": "Schließen Sie die Einstellungen"
+    "closeSettings": "Schließen Sie die Einstellungen",
+    "sessionTimeRemaining": "Session Time Left",
+    "sessionTimeRemainingTitle": "Session time remaining",
+    "showSessionTimeRemainingInStatsOverlay": "Show session time remaining in stats overlay",
+    "statsOverlay": "Stats overlay"
   },
   "settings": {
     "title": "Einstellungen",
@@ -511,6 +516,8 @@
       "discordRichPresenceHint": "Zeigen Sie das Spiel, das Sie streamen, als Ihre Discord-Aktivität an, einschließlich der verstrichenen Zeit.",
       "posterSize": "Postergröße",
       "posterSizeHint": "Adjusts game posters in real time across the library.",
+      "showSessionTimeRemainingInStatsOverlay": "Session Time in Stats Overlay",
+      "showSessionTimeRemainingInStatsOverlayHint": "The session countdown appears in the in-stream sidebar by default. Enable this to also show it in the stats overlay.",
       "sessionElapsedCounter": "Zähler für abgelaufene Sitzungen",
       "sessionElapsedCounterHint": "Aktivieren oder deaktivieren Sie den Zähler für die abgelaufene Live-Sitzung während des Streamings.",
       "sessionTimerReappear": "Der Sitzungstimer wird erneut angezeigt",
