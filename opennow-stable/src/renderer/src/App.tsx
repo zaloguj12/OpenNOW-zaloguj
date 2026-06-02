@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 
 import type {
   ActiveSessionInfo,
+  AuthDeviceLoginChallenge,
   AuthSession,
   CatalogBrowseResult,
   CatalogFilterGroup,
@@ -205,7 +206,9 @@ export function App(): JSX.Element {
   const [providers, setProviders] = useState<LoginProvider[]>([]);
   const [providerIdpId, setProviderIdpId] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [activeLoginMode, setActiveLoginMode] = useState<"oauth" | "qr" | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [qrLoginChallenge, setQrLoginChallenge] = useState<AuthDeviceLoginChallenge | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [startupStatusMessage, setStartupStatusMessage] = useState(() => t("auth.status.restoringSavedSession"));
   const [startupRefreshNotice, setStartupRefreshNotice] = useState<{
@@ -1518,7 +1521,12 @@ export function App(): JSX.Element {
   // Login handler
   const handleLogin = useCallback(async () => {
     setIsLoggingIn(true);
+    setActiveLoginMode("oauth");
     setLoginError(null);
+    if (qrLoginChallenge) {
+      void window.openNow.cancelDeviceLogin({ attemptId: qrLoginChallenge.attemptId });
+    }
+    setQrLoginChallenge(null);
     try {
       const session = await window.openNow.login({ providerIdpId: providerIdpId || undefined });
       setAuthSession(session);
@@ -1529,8 +1537,104 @@ export function App(): JSX.Element {
       setLoginError(error instanceof Error ? error.message : t("errors.loginFailed"));
     } finally {
       setIsLoggingIn(false);
+      setActiveLoginMode(null);
     }
-  }, [loadSessionRuntimeData, providerIdpId, refreshSavedAccounts, t]);
+  }, [loadSessionRuntimeData, providerIdpId, qrLoginChallenge, refreshSavedAccounts, t]);
+
+  const qrLoginAttemptRef = useRef(0);
+  const completingQrLoginRef = useRef(false);
+
+  const handleCancelQrLogin = useCallback(() => {
+    if (completingQrLoginRef.current) {
+      return;
+    }
+    qrLoginAttemptRef.current += 1;
+    if (qrLoginChallenge) {
+      void window.openNow.cancelDeviceLogin({ attemptId: qrLoginChallenge.attemptId });
+    }
+    setQrLoginChallenge(null);
+    setIsLoggingIn(false);
+    setActiveLoginMode(null);
+    setLoginError(null);
+  }, [qrLoginChallenge]);
+
+  const handleQrLogin = useCallback(async () => {
+    const attemptId = qrLoginAttemptRef.current + 1;
+    qrLoginAttemptRef.current = attemptId;
+    completingQrLoginRef.current = false;
+    setIsLoggingIn(true);
+    setActiveLoginMode("qr");
+    setLoginError(null);
+    if (qrLoginChallenge) {
+      void window.openNow.cancelDeviceLogin({ attemptId: qrLoginChallenge.attemptId });
+    }
+    setQrLoginChallenge(null);
+
+    try {
+      const challenge = await window.openNow.startDeviceLogin({ providerIdpId: providerIdpId || undefined });
+      if (qrLoginAttemptRef.current !== attemptId) {
+        void window.openNow.cancelDeviceLogin({ attemptId: challenge.attemptId });
+        return;
+      }
+
+      setQrLoginChallenge(challenge);
+      let intervalSeconds = Math.max(1, challenge.intervalSeconds);
+
+      while (Date.now() < challenge.expiresAt) {
+        await sleep(intervalSeconds * 1000);
+        if (qrLoginAttemptRef.current !== attemptId) {
+          return;
+        }
+
+        const result = await window.openNow.pollDeviceLogin({
+          attemptId: challenge.attemptId,
+          deviceCode: challenge.deviceCode,
+        });
+        if (qrLoginAttemptRef.current !== attemptId) {
+          return;
+        }
+
+        if (result.status === "authorized") {
+          completingQrLoginRef.current = true;
+          setQrLoginChallenge(null);
+          setActiveLoginMode(null);
+          const session = await window.openNow.completeDeviceLogin({ attemptId: challenge.attemptId });
+          if (qrLoginAttemptRef.current !== attemptId) {
+            return;
+          }
+          setAuthSession(session);
+          setProviderIdpId(session.provider.idpId);
+          await refreshSavedAccounts();
+          await loadSessionRuntimeData(session);
+          return;
+        }
+
+        if (result.status === "pending") {
+          continue;
+        }
+
+        if (result.status === "slow_down") {
+          intervalSeconds += 5;
+          continue;
+        }
+
+        throw new Error(result.error ?? t("errors.loginFailed"));
+      }
+
+      throw new Error(t("auth.qr.expired"));
+    } catch (error) {
+      if (qrLoginAttemptRef.current === attemptId) {
+        setLoginError(error instanceof Error ? error.message : t("errors.loginFailed"));
+      }
+    } finally {
+      if (qrLoginAttemptRef.current === attemptId) {
+        setQrLoginChallenge(null);
+        setIsLoggingIn(false);
+        setActiveLoginMode(null);
+        completingQrLoginRef.current = false;
+      }
+    }
+  }, [loadSessionRuntimeData, providerIdpId, qrLoginChallenge, refreshSavedAccounts, t]);
 
   const handleSwitchAccount = useCallback(async (userId: string) => {
     try {
@@ -3427,10 +3531,14 @@ export function App(): JSX.Element {
           selectedProviderId={providerIdpId}
           onProviderChange={setProviderIdpId}
           onLogin={handleLogin}
+          onQrLogin={handleQrLogin}
+          onCancelQrLogin={handleCancelQrLogin}
           isLoading={isLoggingIn}
           error={loginError}
           isInitializing={isInitializing}
           statusMessage={startupStatusMessage}
+          qrLoginChallenge={qrLoginChallenge}
+          isQrLoginPending={activeLoginMode === "qr" && !qrLoginChallenge}
         />
       </>
     );
