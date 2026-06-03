@@ -93,8 +93,18 @@
     },
     "actions": {
       "signIn": "Sign In",
+      "signInWithQr": "Sign in with QR code",
+      "cancelQrLogin": "Cancel QR login",
       "connecting": "Connecting...",
       "restoringSession": "Restoring Session..."
+    },
+    "qr": {
+      "title": "Scan to sign in",
+      "preparing": "Preparing QR login",
+      "preparingDescription": "Requesting a sign-in code...",
+      "description": "Scan with your phone, then approve the sign-in request. OpenNOW will continue automatically.",
+      "alt": "Login QR code",
+      "expired": "QR login expired. Start a new QR login to try again."
     },
     "accounts": {
       "activeAccount": "Active account",
