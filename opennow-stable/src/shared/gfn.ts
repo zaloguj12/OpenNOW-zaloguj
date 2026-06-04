@@ -915,14 +915,37 @@ export interface SendAnswerRequest {
   nvstSdp?: string;
 }
 
+export type NativeStreamerShortcutAction =
+  | "toggleStats"
+  | "togglePointerLock"
+  | "toggleFullscreen"
+  | "stopStream"
+  | "toggleAntiAfk"
+  | "toggleMicrophone"
+  | "screenshot"
+  | "toggleRecording";
+
+export interface NativeStreamerShortcutBindings {
+  toggleStats: string;
+  togglePointerLock: string;
+  toggleFullscreen: string;
+  stopStream: string;
+  toggleAntiAfk: string;
+  toggleMicrophone: string;
+  screenshot: string;
+  toggleRecording: string;
+}
+
 export interface NativeStreamerSessionContext {
   session: SessionInfo;
   settings: StreamSettings;
+  shortcuts: NativeStreamerShortcutBindings;
 }
 
 export function buildNativeStreamerSessionContext(
   session: SessionInfo,
   settings: StreamSettings,
+  shortcuts: NativeStreamerShortcutBindings,
 ): NativeStreamerSessionContext {
   const negotiatedStreamProfile = session.negotiatedStreamProfile
     ? {
@@ -941,6 +964,7 @@ export function buildNativeStreamerSessionContext(
       enableCloudGsync:
         session.negotiatedStreamProfile?.enableCloudGsync ?? settings.enableCloudGsync,
     },
+    shortcuts,
   };
 }
 
@@ -996,6 +1020,7 @@ export type MainToRendererSignalingEvent =
   | { type: "disconnected"; reason: string }
   | { type: "offer"; sdp: string }
   | { type: "remote-ice"; candidate: IceCandidatePayload }
+  | { type: "native-shortcut"; action: NativeStreamerShortcutAction }
   | { type: "native-stream-started"; message?: string }
   | { type: "native-stream-stopped"; reason?: string }
   | { type: "native-stream-stats"; stats: NativeStreamStats }
@@ -1117,6 +1142,7 @@ export interface OpenNowApi {
   sendIceCandidate(input: IceCandidatePayload): Promise<void>;
   sendNativeInput(input: NativeInputPacket): void;
   updateNativeRenderSurface(input: NativeRenderSurfaceUpdate): void;
+  updateNativeShortcuts(shortcuts: NativeStreamerShortcutBindings): void;
   requestKeyframe(input: KeyframeRequest): Promise<void>;
   onSignalingEvent(listener: (event: MainToRendererSignalingEvent) => void): () => void;
   /** Listen for F11 fullscreen toggle from main process */
