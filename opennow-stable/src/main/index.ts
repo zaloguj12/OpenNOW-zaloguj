@@ -484,6 +484,15 @@ const THANKS_REQUEST_HEADERS = {
 } as const;
 const THANKS_EXCLUDED_PATTERN = /(copilot|claude|cappy)/i;
 const THANKS_FETCH_TIMEOUT_MS = 8000;
+const THANKS_CUSTOM_SUPPORTERS: readonly ThankYouSupporter[] = [
+  {
+    name: "DarkevilPT",
+    avatarUrl: "https://github.com/DarkevilPT.png?size=96",
+    profileUrl: "https://github.com/DarkevilPT",
+    isPrivate: false,
+    source: "custom",
+  },
+] as const;
 
 interface GitHubContributorResponse {
   login?: string;
@@ -638,7 +647,32 @@ function parseSupportersFromHtml(html: string): ThankYouSupporter[] {
       avatarUrl,
       profileUrl,
       isPrivate: isPrivate || !name,
+      source: isPrivate || !name ? "private" : "github",
     });
+  }
+
+  return supporters;
+}
+
+function getSupporterDedupeKey(supporter: ThankYouSupporter): string {
+  const profileUrl = supporter.profileUrl?.trim().toLowerCase();
+  if (profileUrl) return `profile:${profileUrl}`;
+  return `name:${supporter.name.trim().toLowerCase()}|private:${supporter.isPrivate}`;
+}
+
+function mergeThanksSupporters(
+  ...supporterGroups: readonly (readonly ThankYouSupporter[])[]
+): ThankYouSupporter[] {
+  const supporters: ThankYouSupporter[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const group of supporterGroups) {
+    for (const supporter of group) {
+      const dedupeKey = getSupporterDedupeKey(supporter);
+      if (seenKeys.has(dedupeKey)) continue;
+      seenKeys.add(dedupeKey);
+      supporters.push({ ...supporter });
+    }
   }
 
   return supporters;
@@ -690,12 +724,16 @@ async function fetchThanksData(): Promise<ThankYouDataResult> {
   }
 
   if (supportersResult.status === "fulfilled") {
-    result.supporters = supportersResult.value;
+    result.supporters = mergeThanksSupporters(
+      THANKS_CUSTOM_SUPPORTERS,
+      supportersResult.value,
+    );
     if (result.supporters.length === 0) {
       result.supportersError =
         "No public supporters were found on GitHub Sponsors.";
     }
   } else {
+    result.supporters = mergeThanksSupporters(THANKS_CUSTOM_SUPPORTERS);
     result.supportersError =
       supportersResult.reason instanceof Error
         ? supportersResult.reason.message

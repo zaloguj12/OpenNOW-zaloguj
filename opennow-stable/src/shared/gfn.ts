@@ -423,6 +423,7 @@ export interface ThankYouSupporter {
   avatarUrl?: string;
   profileUrl?: string;
   isPrivate: boolean;
+  source: "github" | "custom" | "private";
 }
 
 export interface ThankYouDataResult {

@@ -1819,6 +1819,13 @@ export function SettingsPage({ settings, regions, onSettingChange, codecResults,
   }, [renderPersonLink]);
 
   const renderSupporterCard = useCallback((supporter: ThankYouSupporter) => {
+    const sourceLabel =
+      supporter.isPrivate || supporter.source === "private"
+        ? t("settings.thanks.privateSponsor")
+        : supporter.source === "custom"
+          ? t("settings.thanks.projectSponsor")
+          : t("settings.thanks.githubSponsors");
+
     return renderPersonLink(
       supporter,
       <>
@@ -1835,13 +1842,13 @@ export function SettingsPage({ settings, regions, onSettingChange, codecResults,
             <span className="settings-person-badge settings-person-badge--supporter">{t("settings.thanks.supporter")}</span>
           </div>
           <div className="settings-person-meta">
-            <span>{supporter.isPrivate ? "Private sponsor" : "GitHub Sponsors"}</span>
+            <span>{sourceLabel}</span>
             {supporter.profileUrl && <ExternalLink size={14} />}
           </div>
         </div>
       </>,
     );
-  }, [renderPersonLink]);
+  }, [renderPersonLink, t]);
 
   const thanksTabContent = (
     <div className="settings-thanks-layout">
