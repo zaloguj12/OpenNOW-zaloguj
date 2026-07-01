@@ -4162,6 +4162,21 @@ export function App(): JSX.Element {
           qrLoginChallenge={qrLoginChallenge}
           isQrLoginPending={activeLoginMode === "qr" && !qrLoginChallenge}
         />
+        {releaseHighlightsPayload && (
+          <ReleaseHighlightsModal
+            payload={releaseHighlightsPayload}
+            version={releaseHighlightsPayload.version}
+            onDismiss={() => {
+              if (releaseHighlightsIsAuto) {
+                void window.openNow.ackReleaseHighlights().catch((err) => {
+                  console.warn("[App] Failed to ack release highlights:", err);
+                });
+              }
+              setReleaseHighlightsPayload(null);
+              setReleaseHighlightsIsAuto(false);
+            }}
+          />
+        )}
       </>
     );
   }

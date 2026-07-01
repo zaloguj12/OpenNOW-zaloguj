@@ -12,29 +12,63 @@ const UPDATER_TOKEN_ENV_KEYS = ["OPENNOW_GH_TOKEN", "GH_TOKEN"] as const;
 // Version comparison
 // ---------------------------------------------------------------------------
 
-function parseVersionParts(v: string): number[] {
-  return v
-    .replace(/^v/, "")
-    .split(".")
-    .map((part) => {
-      const n = parseInt(part, 10);
-      return Number.isFinite(n) ? n : 0;
-    });
+interface SemverParts {
+  major: number;
+  minor: number;
+  patch: number;
+  /** Prerelease tag, e.g. "beta.1" or "rc.2". Empty string = stable release. */
+  prerelease: string;
+}
+
+function parseSemver(v: string): SemverParts {
+  const clean = v.replace(/^v/, "");
+  const dashIdx = clean.indexOf("-");
+  const numericPart = dashIdx === -1 ? clean : clean.slice(0, dashIdx);
+  const prerelease = dashIdx === -1 ? "" : clean.slice(dashIdx + 1);
+  const [rawMajor = "0", rawMinor = "0", rawPatch = "0"] = numericPart.split(".");
+  return {
+    major: Math.max(0, parseInt(rawMajor, 10) || 0),
+    minor: Math.max(0, parseInt(rawMinor, 10) || 0),
+    patch: Math.max(0, parseInt(rawPatch, 10) || 0),
+    prerelease,
+  };
 }
 
 /**
- * Returns true if `current` is strictly greater than `lastSeen`.
- * An empty `lastSeen` means the user has never seen highlights — return true
- * so they get the first-install experience (or first-update experience).
+ * Compare two prerelease strings.
+ * Stable (empty string) is GREATER than any prerelease per semver spec.
+ * When both have a prerelease, the numeric suffix is compared if present;
+ * otherwise a lexicographic comparison is used.
+ * Returns: positive if a > b, negative if a < b, 0 if equal.
+ */
+function comparePrerelease(a: string, b: string): number {
+  if (a === b) return 0;
+  // Stable release beats any prerelease
+  if (a === "") return 1;
+  if (b === "") return -1;
+  // Both have prerelease tags: try comparing trailing numeric identifiers
+  const numA = parseInt(a.replace(/^.*?(\d+)$/, "$1"), 10);
+  const numB = parseInt(b.replace(/^.*?(\d+)$/, "$1"), 10);
+  if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
+    return numA - numB;
+  }
+  // Fall back to lexicographic order
+  return a < b ? -1 : 1;
+}
+
+/**
+ * Returns true if `current` is strictly greater than `lastSeen` (semver-aware).
+ * An empty `lastSeen` means the user has never seen highlights.
  */
 export function shouldShowReleaseHighlights(current: string, lastSeen: string): boolean {
   if (!current) return false;
   if (!lastSeen) return true;
-  const [aM = 0, am = 0, ap = 0] = parseVersionParts(current);
-  const [bM = 0, bm = 0, bp = 0] = parseVersionParts(lastSeen);
-  if (aM !== bM) return aM > bM;
-  if (am !== bm) return am > bm;
-  return ap > bp;
+  const a = parseSemver(current);
+  const b = parseSemver(lastSeen);
+  if (a.major !== b.major) return a.major > b.major;
+  if (a.minor !== b.minor) return a.minor > b.minor;
+  if (a.patch !== b.patch) return a.patch > b.patch;
+  return comparePrerelease(a.prerelease, b.prerelease) > 0;
 }
 
 // ---------------------------------------------------------------------------
